@@ -4,7 +4,7 @@ Tags: updates, github, plugins, themes
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.1.1
+Stable tag: 0.1.2
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -27,11 +27,11 @@ Only non-draft, non-prerelease GitHub Releases are accepted. Every release must 
 
 == Private repositories ==
 
-Public repositories require no credentials. For private repositories, create a fine-grained, read-only GitHub token limited to the required repositories and define it outside the plugin source:
+Public repositories require no credentials. For private repositories, create a fine-grained GitHub token limited to the required repositories with Contents set to Read-only. Open Plugins > Modern Catholic Updates and paste it into the Private GitHub access field.
 
-`define( 'MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN', 'your-read-only-token' );`
+The plugin validates the token and writes it to `.github-token.php` inside the plugin directory. That dot-prefixed PHP file produces no browser output, is omitted from WordPress's Plugin File Editor, is ignored by Git, is excluded from release ZIPs, and is never saved in WordPress options or shown again. A normal self-update restores the credential file after replacing the plugin. Keep a secure copy because manually replacing the entire plugin folder can remove it.
 
-The token is not stored in WordPress options or displayed in the administration screen. It may instead be supplied through a server environment variable named `MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN` or the `modern_catholic_updates_github_token` filter by a secure host-specific integration. The management page shows setup instructions and whether private access is configured.
+Read-only deployments may instead define `MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN` in `wp-config.php`, provide a server environment variable with that name, or use the `modern_catholic_updates_github_token` filter. External configuration takes precedence over the plugin credential file.
 
 == Installation ==
 
@@ -42,6 +42,11 @@ The token is not stored in WordPress options or displayed in the administration 
 5. Use Check now to refresh release metadata.
 
 == Changelog ==
+
+= 0.1.2 =
+* Add an administrator-only token field backed by an ignored, non-rendering PHP credential file.
+* Validate private repository access before saving and preserve the file through normal self-updates.
+* Keep constants, environment variables, and secure integration filters as read-only deployment alternatives.
 
 = 0.1.1 =
 * Move the management page beneath Plugins and add a direct plugin-row management link.

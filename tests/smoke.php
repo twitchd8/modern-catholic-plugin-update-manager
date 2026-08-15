@@ -17,6 +17,7 @@ require_once ABSPATH . 'wp-admin/includes/plugin.php';
 require_once ABSPATH . 'wp-admin/includes/template.php';
 
 use PowerHouse\ModernCatholic\UpdateManager\Admin_Page;
+use PowerHouse\ModernCatholic\UpdateManager\Credential_File;
 use PowerHouse\ModernCatholic\UpdateManager\GitHub_Client;
 use PowerHouse\ModernCatholic\UpdateManager\Repository_Registry;
 use PowerHouse\ModernCatholic\UpdateManager\Update_Manager;
@@ -49,10 +50,48 @@ if ( ! $parsed || 'twitchd8/modern-catholic-plugin-editorial-sections' !== $pars
 }
 mc_updates_smoke_pass( 'Repository URL parsing is canonical.' );
 
-$registry = new Repository_Registry();
-$github   = new GitHub_Client();
-$manager  = new Update_Manager( $registry, $github );
-$admin    = new Admin_Page( $registry, $github, $manager );
+$credential_test_path = MODERN_CATHOLIC_UPDATE_MANAGER_DIR . 'tests/.github-token-smoke.php';
+if ( file_exists( $credential_test_path ) ) {
+	wp_delete_file( $credential_test_path );
+}
+$credential_test = new Credential_File( $credential_test_path );
+$fake_token       = 'github_pat_' . str_repeat( 'a', 32 );
+$saved_token      = $credential_test->write( $fake_token );
+if ( is_wp_error( $saved_token ) || $fake_token !== $credential_test->read() ) {
+	mc_updates_smoke_fail( 'Filesystem credential could not be written and read.' );
+}
+wp_delete_file( $credential_test_path );
+$credential_test->restore_after_update(
+	null,
+	array(
+		'action' => 'update',
+		'type'   => 'plugin',
+		'plugin' => $plugin_file,
+	)
+);
+if ( $fake_token !== $credential_test->read() ) {
+	mc_updates_smoke_fail( 'Filesystem credential was not restored after a simulated self-update.' );
+}
+$credential_test->remove();
+if ( file_exists( $credential_test_path ) ) {
+	mc_updates_smoke_fail( 'Filesystem credential test cleanup failed.' );
+}
+mc_updates_smoke_pass( 'Ignored credential file writes, reads, removes, and survives self-update replacement.' );
+
+$credentials = new Credential_File();
+$registry    = new Repository_Registry();
+$github      = new GitHub_Client( $credentials );
+$manager     = new Update_Manager( $registry, $github );
+$admin       = new Admin_Page( $registry, $github, $manager, $credentials );
+
+$runtime_token = getenv( 'MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN' );
+if ( false !== $runtime_token && '' !== trim( (string) $runtime_token ) ) {
+	$validated_token = $github->validate_token( $runtime_token );
+	if ( is_wp_error( $validated_token ) ) {
+		mc_updates_smoke_fail( 'Configured private GitHub credential was rejected.' );
+	}
+	mc_updates_smoke_pass( 'Configured credential can read the private Update Manager repository.' );
+}
 
 $test_id = 'twitchd8/modern-catholic-plugin-future-test';
 $saved   = $registry->save(
@@ -138,7 +177,7 @@ mc_updates_smoke_pass( 'Management page and direct link are registered beneath P
 ob_start();
 $admin->render();
 $page = ob_get_clean();
-if ( false === strpos( $page, 'Add a trusted repository' ) || false === strpos( $page, 'Modern Catholic – Editorial Sections' ) || false === strpos( $page, 'Private GitHub repositories require a read-only token.' ) ) {
+if ( false === strpos( $page, 'Add a trusted repository' ) || false === strpos( $page, 'Modern Catholic – Editorial Sections' ) || false === strpos( $page, 'Private GitHub access' ) || false === strpos( $page, 'github_token' ) ) {
 	mc_updates_smoke_fail( 'Admin page did not render the registry controls and release.' );
 }
 mc_updates_smoke_pass( 'Admin management page renders repository controls and status.' );

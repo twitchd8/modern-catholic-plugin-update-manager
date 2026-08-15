@@ -15,6 +15,13 @@ final class GitHub_Client {
 	const CACHE_SECONDS = 21600;
 	const OPTION_DIGESTS = 'modern_catholic_updates_package_digests';
 
+	/** @var Credential_File */
+	private $credentials;
+
+	public function __construct( ?Credential_File $credentials = null ) {
+		$this->credentials = $credentials ? $credentials : new Credential_File();
+	}
+
 	/**
 	 * Fetch the latest stable GitHub Release for a repository.
 	 *
@@ -195,6 +202,41 @@ final class GitHub_Client {
 		return '' !== $this->token();
 	}
 
+	/** Return the active credential source without revealing the credential. */
+	public function token_source() {
+		if ( defined( 'MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN' ) && '' !== trim( (string) MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN ) ) {
+			return 'wp-config.php';
+		}
+		$environment_token = getenv( 'MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN' );
+		if ( false !== $environment_token && '' !== trim( (string) $environment_token ) ) {
+			return 'environment';
+		}
+		if ( $this->credentials->exists() ) {
+			return 'credential_file';
+		}
+		return '' !== trim( (string) apply_filters( 'modern_catholic_updates_github_token', '' ) ) ? 'filter' : '';
+	}
+
+	/** Validate candidate access against this plugin's private repository. */
+	public function validate_token( $token ) {
+		$token    = trim( (string) $token );
+		$response = wp_remote_get(
+			'https://api.github.com/repos/twitchd8/modern-catholic-plugin-update-manager',
+			array(
+				'timeout'     => 15,
+				'redirection' => 2,
+				'headers'     => $this->headers( $token ),
+			)
+		);
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+		if ( 200 !== wp_remote_retrieve_response_code( $response ) ) {
+			return new \WP_Error( 'github_token_rejected', __( 'GitHub rejected the token or it cannot read the Update Manager repository.', 'modern-catholic-plugin-update-manager' ) );
+		}
+		return true;
+	}
+
 	/**
 	 * Normalize a version tag.
 	 *
@@ -211,13 +253,13 @@ final class GitHub_Client {
 	 *
 	 * @return array<string,string>
 	 */
-	private function headers() {
+	private function headers( $token_override = null ) {
 		$headers = array(
 			'Accept'               => 'application/vnd.github+json',
 			'X-GitHub-Api-Version' => '2022-11-28',
 			'User-Agent'           => 'Modern-Catholic-Update-Manager/' . MODERN_CATHOLIC_UPDATE_MANAGER_VERSION,
 		);
-		$token = $this->token();
+		$token = null === $token_override ? $this->token() : trim( (string) $token_override );
 		if ( $token ) {
 			$headers['Authorization'] = 'Bearer ' . $token;
 		}
@@ -225,7 +267,8 @@ final class GitHub_Client {
 	}
 
 	/**
-	 * Retrieve a token from wp-config.php, the process environment, or a filter.
+	 * Retrieve a token from wp-config.php, the process environment, the ignored
+	 * credential file, or a filter.
 	 *
 	 * @return string
 	 */
@@ -234,6 +277,9 @@ final class GitHub_Client {
 		if ( '' === trim( $token ) ) {
 			$environment_token = getenv( 'MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN' );
 			$token             = false === $environment_token ? '' : (string) $environment_token;
+		}
+		if ( '' === trim( $token ) ) {
+			$token = $this->credentials->read();
 		}
 		return trim( (string) apply_filters( 'modern_catholic_updates_github_token', $token ) );
 	}

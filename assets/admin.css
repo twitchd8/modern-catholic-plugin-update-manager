@@ -16,6 +16,29 @@
 	vertical-align: middle;
 }
 
+.modern-catholic-updates .mc-credentials {
+	max-width: 70rem;
+	margin: 1.5rem 0;
+	padding: 1rem;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+}
+
+.modern-catholic-updates .mc-token-form {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	margin: 1rem 0 0.5rem;
+}
+
+.modern-catholic-updates .mc-token-form input[type="password"] {
+	width: min(32rem, 100%);
+}
+
+.modern-catholic-updates .mc-token-remove-form {
+	margin-bottom: 0.75rem;
+}
+
 .modern-catholic-updates .mc-type,
 .modern-catholic-updates .mc-status {
 	display: inline-block;
@@ -67,11 +90,13 @@
 
 @media (max-width: 782px) {
 	.modern-catholic-updates .mc-updates-summary,
+	.modern-catholic-updates .mc-token-form,
 	.modern-catholic-updates .mc-repository-form {
 		display: block;
 	}
 
 	.modern-catholic-updates .mc-updates-summary > *,
+	.modern-catholic-updates .mc-token-form > *,
 	.modern-catholic-updates .mc-repository-form label {
 		margin-bottom: 0.75rem;
 	}
