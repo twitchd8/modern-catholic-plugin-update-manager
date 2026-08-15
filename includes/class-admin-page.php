@@ -41,6 +41,9 @@ final class Admin_Page {
 		add_action( 'admin_post_modern_catholic_updates_install', array( $this, 'handle_install' ) );
 		add_action( 'admin_post_modern_catholic_updates_save_token', array( $this, 'handle_save_token' ) );
 		add_action( 'admin_post_modern_catholic_updates_remove_token', array( $this, 'handle_remove_token' ) );
+		add_action( 'admin_post_modern_catholic_updates_discover', array( $this, 'handle_discover' ) );
+		add_action( 'admin_post_modern_catholic_updates_catalog_add', array( $this, 'handle_catalog_add' ) );
+		add_action( 'admin_post_modern_catholic_updates_catalog_install', array( $this, 'handle_catalog_install' ) );
 	}
 
 	/** Add the management page beneath Plugins. */
@@ -97,6 +100,7 @@ final class Admin_Page {
 		}
 
 		$results = $this->manager->scan( false );
+		$catalog = $this->github->discover_catalog( false );
 		$message = isset( $_GET['mc_updates_message'] ) ? sanitize_key( wp_unslash( $_GET['mc_updates_message'] ) ) : '';
 		?>
 		<div class="wrap modern-catholic-updates">
@@ -113,7 +117,9 @@ final class Admin_Page {
 				</form>
 			</div>
 			<?php $this->render_credentials(); ?>
+			<?php $this->render_catalog( $catalog ); ?>
 
+			<h2><?php esc_html_e( 'Managed components', 'modern-catholic-plugin-update-manager' ); ?></h2>
 			<table class="widefat striped mc-updates-table">
 				<thead><tr>
 					<th><?php esc_html_e( 'Component', 'modern-catholic-plugin-update-manager' ); ?></th>
@@ -179,6 +185,7 @@ final class Admin_Page {
 			$this->redirect( 'token_write_failed' );
 		}
 		$this->manager->scan( true );
+		$this->github->discover_catalog( true );
 		delete_site_transient( 'update_plugins' );
 		delete_site_transient( 'update_themes' );
 		$this->redirect( 'token_saved' );
@@ -191,9 +198,46 @@ final class Admin_Page {
 			$this->redirect( 'token_write_failed' );
 		}
 		$this->manager->scan( true );
+		$this->github->discover_catalog( true );
 		delete_site_transient( 'update_plugins' );
 		delete_site_transient( 'update_themes' );
 		$this->redirect( 'token_removed' );
+	}
+
+	/** Refresh the trusted GitHub repository catalog. */
+	public function handle_discover() {
+		$this->authorize( 'modern_catholic_updates_discover' );
+		$catalog = $this->github->discover_catalog( true );
+		$this->redirect( is_wp_error( $catalog ) ? 'catalog_failed' : 'catalog_refreshed' );
+	}
+
+	/** Add one server-discovered catalog repository to the managed registry. */
+	public function handle_catalog_add() {
+		$this->authorize( 'modern_catholic_updates_catalog_add' );
+		$repository = $this->catalog_repository_from_request();
+		if ( is_wp_error( $repository ) || empty( $repository['release'] ) ) {
+			$this->redirect( 'catalog_repository_invalid' );
+		}
+		$result = $this->registry->save( $repository );
+		$this->redirect( is_wp_error( $result ) ? 'catalog_repository_invalid' : 'catalog_repository_added' );
+	}
+
+	/** Add and install one server-discovered catalog repository. */
+	public function handle_catalog_install() {
+		$this->authorize( 'modern_catholic_updates_catalog_install' );
+		$repository = $this->catalog_repository_from_request();
+		if ( is_wp_error( $repository ) || empty( $repository['release'] ) ) {
+			$this->redirect( 'catalog_repository_invalid' );
+		}
+		$install_capability = 'theme' === $repository['type'] ? 'install_themes' : 'install_plugins';
+		if ( ! current_user_can( $install_capability ) ) {
+			wp_die( esc_html__( 'You do not have permission to perform this action.', 'modern-catholic-plugin-update-manager' ) );
+		}
+		$saved = $this->registry->save( $repository );
+		if ( is_wp_error( $saved ) ) {
+			$this->redirect( 'catalog_repository_invalid' );
+		}
+		$this->install_repository( $this->registry->get( $repository['id'] ) );
 	}
 
 	/** Save a manually trusted repository. */
@@ -241,6 +285,11 @@ final class Admin_Page {
 		if ( ! current_user_can( $install_capability ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'modern-catholic-plugin-update-manager' ) );
 		}
+		$this->install_repository( $repository );
+	}
+
+	/** Download and install one trusted repository's latest exact release asset. */
+	private function install_repository( $repository ) {
 		$state = $this->manager->component_state( $repository );
 		if ( $state['installed'] || $state['development'] ) {
 			$this->redirect( 'already_installed' );
@@ -320,6 +369,83 @@ final class Admin_Page {
 		<?php
 	}
 
+	/** Render repositories discovered from the trusted GitHub catalog. */
+	private function render_catalog( $catalog ) {
+		$managed = $this->registry->all();
+		?>
+		<section class="mc-catalog">
+			<div class="mc-section-heading">
+				<div>
+					<h2><?php esc_html_e( 'Available Modern Catholic components', 'modern-catholic-plugin-update-manager' ); ?></h2>
+					<p><?php esc_html_e( 'Repositories visible to the configured GitHub credential are filtered to the Modern Catholic plugin and theme naming convention. Installation is offered only when an exact stable release ZIP is present.', 'modern-catholic-plugin-update-manager' ); ?></p>
+				</div>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="modern_catholic_updates_discover">
+					<?php wp_nonce_field( 'modern_catholic_updates_discover' ); ?>
+					<?php submit_button( __( 'Discover from GitHub', 'modern-catholic-plugin-update-manager' ), 'secondary', 'submit', false ); ?>
+				</form>
+			</div>
+			<?php if ( is_wp_error( $catalog ) ) : ?>
+				<div class="notice notice-error inline"><p><?php echo esc_html( $catalog->get_error_message() ); ?></p></div>
+			<?php elseif ( empty( $catalog['items'] ) ) : ?>
+				<p><?php esc_html_e( 'No matching repositories are visible to the current GitHub credential.', 'modern-catholic-plugin-update-manager' ); ?></p>
+			<?php else : ?>
+				<table class="widefat striped mc-catalog-table">
+					<thead><tr>
+						<th><?php esc_html_e( 'Component', 'modern-catholic-plugin-update-manager' ); ?></th>
+						<th><?php esc_html_e( 'Type', 'modern-catholic-plugin-update-manager' ); ?></th>
+						<th><?php esc_html_e( 'Visibility', 'modern-catholic-plugin-update-manager' ); ?></th>
+						<th><?php esc_html_e( 'Latest release', 'modern-catholic-plugin-update-manager' ); ?></th>
+						<th><?php esc_html_e( 'Actions', 'modern-catholic-plugin-update-manager' ); ?></th>
+					</tr></thead>
+					<tbody>
+					<?php foreach ( $catalog['items'] as $item ) : ?>
+						<?php
+						$is_managed = isset( $managed[ $item['id'] ] );
+						$registered = $is_managed ? $managed[ $item['id'] ] : $item;
+						$state              = $this->manager->component_state( $registered );
+						$install_capability = 'theme' === $item['type'] ? 'install_themes' : 'install_plugins';
+						?>
+						<tr>
+							<td><strong><?php echo esc_html( $item['name'] ); ?></strong><br><a href="<?php echo esc_url( $item['repository_url'] ); ?>" target="_blank" rel="noopener noreferrer"><code><?php echo esc_html( $item['id'] ); ?></code></a><?php if ( $item['description'] ) : ?><br><small><?php echo esc_html( $item['description'] ); ?></small><?php endif; ?></td>
+							<td><?php echo esc_html( ucfirst( $item['type'] ) ); ?></td>
+							<td><?php echo esc_html( ucfirst( $item['visibility'] ) ); ?></td>
+							<td>
+								<?php if ( ! empty( $item['release']['version'] ) ) : ?>
+									<?php echo esc_html( $item['release']['version'] ); ?><br><small><?php echo esc_html( $item['release']['asset_name'] ); ?></small>
+								<?php else : ?>
+									&mdash;<br><small><?php echo esc_html( isset( $item['release_error']['message'] ) ? $item['release_error']['message'] : __( 'No installable release.', 'modern-catholic-plugin-update-manager' ) ); ?></small>
+								<?php endif; ?>
+							</td>
+							<td>
+								<?php if ( $state['installed'] ) : ?>
+									<span class="mc-status mc-status-current"><?php esc_html_e( 'Installed', 'modern-catholic-plugin-update-manager' ); ?></span>
+								<?php elseif ( empty( $item['release'] ) ) : ?>
+									<span class="mc-status"><?php esc_html_e( 'Unavailable', 'modern-catholic-plugin-update-manager' ); ?></span>
+								<?php elseif ( $is_managed && current_user_can( $install_capability ) ) : ?>
+									<?php $this->action_form( 'modern_catholic_updates_install', $item['id'], __( 'Install latest', 'modern-catholic-plugin-update-manager' ), true ); ?>
+								<?php elseif ( ! $is_managed ) : ?>
+									<?php $this->action_form( 'modern_catholic_updates_catalog_add', $item['id'], __( 'Add to manager', 'modern-catholic-plugin-update-manager' ) ); ?>
+									<?php if ( current_user_can( $install_capability ) ) : ?>
+										<?php $this->action_form( 'modern_catholic_updates_catalog_install', $item['id'], __( 'Add and install', 'modern-catholic-plugin-update-manager' ), true ); ?>
+									<?php endif; ?>
+								<?php endif; ?>
+							</td>
+						</tr>
+					<?php endforeach; ?>
+					</tbody>
+				</table>
+			<?php endif; ?>
+		</section>
+		<?php
+	}
+
+	/** Resolve catalog input from a fresh server-side trusted catalog. */
+	private function catalog_repository_from_request() {
+		$id = isset( $_POST['repository'] ) ? sanitize_text_field( wp_unslash( $_POST['repository'] ) ) : '';
+		return $this->github->catalog_item( $id, true );
+	}
+
 	/** Render row actions. */
 	private function render_actions( $item ) {
 		$install_capability = 'theme' === $item['type'] ? 'install_themes' : 'install_plugins';
@@ -370,6 +496,10 @@ final class Admin_Page {
 			'repository_enabled'  => array( 'success', __( 'Repository monitoring enabled.', 'modern-catholic-plugin-update-manager' ) ),
 			'repository_disabled' => array( 'warning', __( 'Repository monitoring disabled.', 'modern-catholic-plugin-update-manager' ) ),
 			'repository_removed'  => array( 'success', __( 'Manual repository removed.', 'modern-catholic-plugin-update-manager' ) ),
+			'catalog_refreshed'   => array( 'success', __( 'The Modern Catholic GitHub catalog was refreshed.', 'modern-catholic-plugin-update-manager' ) ),
+			'catalog_failed'      => array( 'error', __( 'GitHub catalog discovery failed. Verify the token and try again.', 'modern-catholic-plugin-update-manager' ) ),
+			'catalog_repository_added' => array( 'success', __( 'The discovered repository was added to the update manager.', 'modern-catholic-plugin-update-manager' ) ),
+			'catalog_repository_invalid' => array( 'error', __( 'That repository is unavailable or does not have an exact installable release ZIP.', 'modern-catholic-plugin-update-manager' ) ),
 			'token_saved'         => array( 'success', __( 'Private GitHub access was verified and the token file was saved.', 'modern-catholic-plugin-update-manager' ) ),
 			'token_removed'       => array( 'success', __( 'The plugin token file was removed.', 'modern-catholic-plugin-update-manager' ) ),
 			'token_invalid'       => array( 'error', __( 'GitHub rejected the token or it cannot read the private Update Manager repository.', 'modern-catholic-plugin-update-manager' ) ),

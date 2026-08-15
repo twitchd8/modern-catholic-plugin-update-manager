@@ -11,3 +11,5 @@ This directory is an independent Modern Catholic component repository.
 - `.github-token.php` is runtime-only: keep it ignored, exclude it from release archives, and never inspect or print its saved value.
 
 The update manager intentionally suppresses native updates for component directories containing `.git`. Test native package replacement in a separate ZIP-installed staging site.
+
+Repository catalog discovery is limited to trusted owners and names matching `modern-catholic-plugin-*`, `modern-catholic-theme`, or `modern-catholic-theme-*`. Catalog installation still requires the exact `{slug}-{version}.zip` stable release asset.

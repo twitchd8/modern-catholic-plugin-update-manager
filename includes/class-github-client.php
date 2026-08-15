@@ -13,7 +13,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class GitHub_Client {
 	const CACHE_SECONDS = 21600;
+	const CATALOG_CACHE_SECONDS = 900;
 	const OPTION_DIGESTS = 'modern_catholic_updates_package_digests';
+	const CATALOG_TRANSIENT = 'modern_catholic_updates_catalog';
 
 	/** @var Credential_File */
 	private $credentials;
@@ -118,6 +120,79 @@ final class GitHub_Client {
 		$this->remember_digest( $release['package'], $release['digest'] );
 
 		return $release;
+	}
+
+	/**
+	 * Discover installable Modern Catholic repositories visible to GitHub.
+	 *
+	 * @param bool $force Bypass the catalog and release caches.
+	 * @return array<string,mixed>|\WP_Error
+	 */
+	public function discover_catalog( $force = false ) {
+		if ( $force ) {
+			delete_transient( self::CATALOG_TRANSIENT );
+		}
+		$cached = get_transient( self::CATALOG_TRANSIENT );
+		if ( is_array( $cached ) && isset( $cached['items'] ) ) {
+			return $cached;
+		}
+
+		$owners = get_option( Repository_Registry::OPTION_OWNERS, array( 'twitchd8' ) );
+		$owners = apply_filters( 'modern_catholic_updates_trusted_owners', $owners );
+		$owners = is_array( $owners ) ? array_values( array_unique( array_filter( array_map( 'strtolower', $owners ) ) ) ) : array( 'twitchd8' );
+		$rows   = array();
+
+		if ( $this->has_token() ) {
+			$response = $this->paginated_get( 'https://api.github.com/user/repos?per_page=100&affiliation=owner&sort=full_name&direction=asc' );
+			if ( is_wp_error( $response ) ) {
+				return $response;
+			}
+			$rows = $response;
+		} else {
+			foreach ( $owners as $owner ) {
+				$response = $this->paginated_get( 'https://api.github.com/users/' . rawurlencode( $owner ) . '/repos?per_page=100&type=owner&sort=full_name&direction=asc' );
+				if ( is_wp_error( $response ) ) {
+					return $response;
+				}
+				$rows = array_merge( $rows, $response );
+			}
+		}
+
+		$items = array();
+		foreach ( $rows as $row ) {
+			$repository = $this->catalog_repository( $row, $owners );
+			if ( ! $repository ) {
+				continue;
+			}
+			$release = $this->latest_release( $repository, $force );
+			if ( is_wp_error( $release ) ) {
+				$repository['release_error'] = array(
+					'code'    => $release->get_error_code(),
+					'message' => $release->get_error_message(),
+				);
+			} else {
+				$repository['release'] = $release;
+			}
+			$items[ $repository['id'] ] = $repository;
+		}
+		ksort( $items );
+
+		$catalog = array(
+			'checked_at' => time(),
+			'items'      => $items,
+		);
+		set_transient( self::CATALOG_TRANSIENT, $catalog, self::CATALOG_CACHE_SECONDS );
+		return $catalog;
+	}
+
+	/** Return one server-discovered catalog item by canonical repository ID. */
+	public function catalog_item( $id, $force = false ) {
+		$id      = strtolower( trim( (string) $id ) );
+		$catalog = $this->discover_catalog( $force );
+		if ( is_wp_error( $catalog ) || empty( $catalog['items'][ $id ] ) ) {
+			return is_wp_error( $catalog ) ? $catalog : new \WP_Error( 'catalog_repository_missing', __( 'That repository is not in the trusted GitHub catalog.', 'modern-catholic-plugin-update-manager' ) );
+		}
+		return $catalog['items'][ $id ];
 	}
 
 	/**
@@ -264,6 +339,81 @@ final class GitHub_Client {
 			$headers['Authorization'] = 'Bearer ' . $token;
 		}
 		return $headers;
+	}
+
+	/** Fetch all pages from one allowlisted GitHub API collection. */
+	private function paginated_get( $url ) {
+		$items = array();
+		for ( $page = 0; $url && $page < 10; ++$page ) {
+			if ( 0 !== strpos( $url, 'https://api.github.com/' ) ) {
+				return new \WP_Error( 'github_pagination_url', __( 'GitHub returned an invalid pagination URL.', 'modern-catholic-plugin-update-manager' ) );
+			}
+			$response = wp_remote_get(
+				$url,
+				array(
+					'timeout'     => 20,
+					'redirection' => 0,
+					'headers'     => $this->headers(),
+				)
+			);
+			if ( is_wp_error( $response ) ) {
+				return $response;
+			}
+			if ( 200 !== wp_remote_retrieve_response_code( $response ) ) {
+				return new \WP_Error( 'github_catalog_http_error', sprintf( __( 'GitHub repository discovery returned HTTP %d.', 'modern-catholic-plugin-update-manager' ), wp_remote_retrieve_response_code( $response ) ) );
+			}
+			$data = json_decode( wp_remote_retrieve_body( $response ), true );
+			if ( ! is_array( $data ) ) {
+				return new \WP_Error( 'github_catalog_invalid', __( 'GitHub returned invalid repository catalog data.', 'modern-catholic-plugin-update-manager' ) );
+			}
+			$items = array_merge( $items, $data );
+			$url   = '';
+			$link  = wp_remote_retrieve_header( $response, 'link' );
+			if ( $link && preg_match( '/<([^>]+)>;\s*rel="next"/', $link, $matches ) ) {
+				$url = esc_url_raw( $matches[1] );
+			}
+		}
+		return $items;
+	}
+
+	/** Convert trusted GitHub repository metadata into a package definition. */
+	private function catalog_repository( $row, $owners ) {
+		if ( ! is_array( $row ) || empty( $row['name'] ) || empty( $row['owner']['login'] ) || ! empty( $row['archived'] ) || ! empty( $row['disabled'] ) || ! empty( $row['fork'] ) ) {
+			return null;
+		}
+		$owner = sanitize_text_field( $row['owner']['login'] );
+		$slug  = sanitize_title( $row['name'] );
+		if ( ! in_array( strtolower( $owner ), $owners, true ) ) {
+			return null;
+		}
+		if ( 0 === strpos( $slug, 'modern-catholic-plugin-' ) ) {
+			$type  = 'plugin';
+			$label = substr( $slug, strlen( 'modern-catholic-plugin-' ) );
+		} elseif ( 'modern-catholic-theme' === $slug || 0 === strpos( $slug, 'modern-catholic-theme-' ) ) {
+			$type  = 'theme';
+			$label = 'modern-catholic-theme' === $slug ? 'Theme' : substr( $slug, strlen( 'modern-catholic-theme-' ) );
+		} else {
+			return null;
+		}
+		if ( '' === $label ) {
+			return null;
+		}
+
+		$name = 'Modern Catholic – ' . ucwords( str_replace( '-', ' ', $label ) );
+		return array(
+			'id'             => strtolower( $owner . '/' . $slug ),
+			'owner'          => $owner,
+			'repo'           => $slug,
+			'repository'     => $owner . '/' . $slug,
+			'repository_url' => isset( $row['html_url'] ) ? esc_url_raw( $row['html_url'] ) : 'https://github.com/' . $owner . '/' . $slug,
+			'name'           => $name,
+			'description'    => isset( $row['description'] ) ? sanitize_text_field( $row['description'] ) : '',
+			'type'           => $type,
+			'slug'           => $slug,
+			'entrypoint'     => '',
+			'asset_template' => '{slug}-{version}.zip',
+			'visibility'     => ! empty( $row['private'] ) ? 'private' : 'public',
+		);
 	}
 
 	/**
