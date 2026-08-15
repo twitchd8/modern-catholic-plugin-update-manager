@@ -1,0 +1,78 @@
+.modern-catholic-updates .mc-updates-summary {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	margin: 1rem 0;
+	padding: 1rem;
+	background: #fff;
+	border-left: 4px solid #7b2d3b;
+}
+
+.modern-catholic-updates .mc-updates-summary form {
+	margin-left: auto;
+}
+
+.modern-catholic-updates .mc-updates-table td {
+	vertical-align: middle;
+}
+
+.modern-catholic-updates .mc-type,
+.modern-catholic-updates .mc-status {
+	display: inline-block;
+	padding: 0.15rem 0.45rem;
+	border-radius: 999px;
+	background: #f0f0f1;
+}
+
+.modern-catholic-updates .mc-status-update_available,
+.modern-catholic-updates .mc-status-development_update {
+	background: #fcf0c3;
+	color: #614200;
+}
+
+.modern-catholic-updates .mc-status-current,
+.modern-catholic-updates .mc-status-development_current {
+	background: #d7f1df;
+	color: #145523;
+}
+
+.modern-catholic-updates .mc-status-release_not_found,
+.modern-catholic-updates .mc-status-missing_release_asset {
+	background: #f7d7d7;
+	color: #7a1515;
+}
+
+.modern-catholic-updates .mc-inline-action {
+	display: inline-block;
+	margin: 0 0.25rem 0.25rem 0;
+}
+
+.modern-catholic-updates .mc-repository-form {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(16rem, 1fr));
+	gap: 1rem;
+	max-width: 70rem;
+}
+
+.modern-catholic-updates .mc-repository-form label {
+	display: grid;
+	gap: 0.35rem;
+	font-weight: 600;
+}
+
+.modern-catholic-updates .mc-repository-form .submit {
+	grid-column: 1 / -1;
+	margin: 0;
+}
+
+@media (max-width: 782px) {
+	.modern-catholic-updates .mc-updates-summary,
+	.modern-catholic-updates .mc-repository-form {
+		display: block;
+	}
+
+	.modern-catholic-updates .mc-updates-summary > *,
+	.modern-catholic-updates .mc-repository-form label {
+		margin-bottom: 0.75rem;
+	}
+}
