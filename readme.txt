@@ -22,6 +22,7 @@ Modern Catholic – Update Manager monitors registered GitHub repositories for s
 * Install the latest release of a registered component that is not installed.
 * Protect local Git working copies from WordPress filesystem replacement.
 * Verify downloaded assets against GitHub-provided SHA-256 digests when available.
+* Discover available Modern Catholic plugin and theme repositories visible to GitHub and install their exact stable release packages.
 
 Only non-draft, non-prerelease GitHub Releases are accepted. Every release must include an exact installable ZIP asset named `{slug}-{version}.zip` unless the repository definition specifies another template. Automatically generated GitHub source archives are never used.
 
@@ -42,6 +43,9 @@ Read-only deployments may instead define `MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN` 
 5. Use Check now to refresh release metadata.
 
 == Changelog ==
+
+= Unreleased =
+* Add a GitHub-backed catalog of conventionally named Modern Catholic plugins and themes with add and install actions.
 
 = 0.1.2 =
 * Add an administrator-only token field backed by an ignored, non-rendering PHP credential file.

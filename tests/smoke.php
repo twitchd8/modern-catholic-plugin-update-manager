@@ -93,6 +93,21 @@ if ( false !== $runtime_token && '' !== trim( (string) $runtime_token ) ) {
 	mc_updates_smoke_pass( 'Configured credential can read the private Update Manager repository.' );
 }
 
+$catalog = $github->discover_catalog( true );
+if ( is_wp_error( $catalog ) || empty( $catalog['items']['twitchd8/modern-catholic-plugin-editorial-sections']['release'] ) ) {
+	mc_updates_smoke_fail( 'GitHub catalog discovery omitted the public installable component.' );
+}
+if ( ! empty( $catalog['items']['twitchd8/modern-catholic-plugin-parish-blog'] ) ) {
+	mc_updates_smoke_fail( 'GitHub catalog discovery included an archived component.' );
+}
+if ( false !== $runtime_token && '' !== trim( (string) $runtime_token ) && empty( $catalog['items']['twitchd8/modern-catholic-plugin-update-manager']['release'] ) ) {
+	mc_updates_smoke_fail( 'Authenticated catalog discovery omitted the private Update Manager release.' );
+}
+if ( ! is_wp_error( $github->catalog_item( 'untrusted/example', false ) ) ) {
+	mc_updates_smoke_fail( 'Catalog lookup accepted an undiscovered repository.' );
+}
+mc_updates_smoke_pass( 'GitHub catalog filters trusted Modern Catholic repositories and verifies exact releases.' );
+
 $test_id = 'twitchd8/modern-catholic-plugin-future-test';
 $saved   = $registry->save(
 	array(
@@ -177,7 +192,7 @@ mc_updates_smoke_pass( 'Management page and direct link are registered beneath P
 ob_start();
 $admin->render();
 $page = ob_get_clean();
-if ( false === strpos( $page, 'Add a trusted repository' ) || false === strpos( $page, 'Modern Catholic – Editorial Sections' ) || false === strpos( $page, 'Private GitHub access' ) || false === strpos( $page, 'github_token' ) ) {
+if ( false === strpos( $page, 'Add a trusted repository' ) || false === strpos( $page, 'Modern Catholic – Editorial Sections' ) || false === strpos( $page, 'Private GitHub access' ) || false === strpos( $page, 'github_token' ) || false === strpos( $page, 'Discover from GitHub' ) || false === strpos( $page, 'modern_catholic_updates_install' ) ) {
 	mc_updates_smoke_fail( 'Admin page did not render the registry controls and release.' );
 }
 mc_updates_smoke_pass( 'Admin management page renders repository controls and status.' );
