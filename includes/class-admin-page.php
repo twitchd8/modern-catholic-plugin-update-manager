@@ -18,11 +18,14 @@ final class Admin_Page {
 	private $github;
 	/** @var Update_Manager */
 	private $manager;
+	/** @var Credential_File */
+	private $credentials;
 
-	public function __construct( Repository_Registry $registry, GitHub_Client $github, Update_Manager $manager ) {
+	public function __construct( Repository_Registry $registry, GitHub_Client $github, Update_Manager $manager, Credential_File $credentials ) {
 		$this->registry = $registry;
 		$this->github   = $github;
 		$this->manager  = $manager;
+		$this->credentials = $credentials;
 	}
 
 	/** Register hooks. */
@@ -36,6 +39,8 @@ final class Admin_Page {
 		add_action( 'admin_post_modern_catholic_updates_toggle_repository', array( $this, 'handle_toggle_repository' ) );
 		add_action( 'admin_post_modern_catholic_updates_remove_repository', array( $this, 'handle_remove_repository' ) );
 		add_action( 'admin_post_modern_catholic_updates_install', array( $this, 'handle_install' ) );
+		add_action( 'admin_post_modern_catholic_updates_save_token', array( $this, 'handle_save_token' ) );
+		add_action( 'admin_post_modern_catholic_updates_remove_token', array( $this, 'handle_remove_token' ) );
 	}
 
 	/** Add the management page beneath Plugins. */
@@ -107,14 +112,7 @@ final class Admin_Page {
 					<?php submit_button( __( 'Check now', 'modern-catholic-plugin-update-manager' ), 'primary', 'submit', false ); ?>
 				</form>
 			</div>
-			<?php if ( ! $this->github->has_token() ) : ?>
-				<div class="notice notice-info inline">
-					<p><strong><?php esc_html_e( 'Private GitHub repositories require a read-only token.', 'modern-catholic-plugin-update-manager' ); ?></strong></p>
-					<p><?php esc_html_e( 'Create a fine-grained personal access token limited to the required repositories with Contents set to Read-only. Then define it in wp-config.php or provide the same name as a server environment variable. The token is never saved in WordPress options.', 'modern-catholic-plugin-update-manager' ); ?></p>
-					<p><code>define( 'MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN', 'github_pat_…' );</code></p>
-					<p><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Create a fine-grained token on GitHub', 'modern-catholic-plugin-update-manager' ); ?></a></p>
-				</div>
-			<?php endif; ?>
+			<?php $this->render_credentials(); ?>
 
 			<table class="widefat striped mc-updates-table">
 				<thead><tr>
@@ -163,6 +161,39 @@ final class Admin_Page {
 		delete_site_transient( 'update_plugins' );
 		delete_site_transient( 'update_themes' );
 		$this->redirect( 'checked' );
+	}
+
+	/** Validate and save a private-repository token to the ignored file. */
+	public function handle_save_token() {
+		$this->authorize( 'modern_catholic_updates_save_token', 'manage_options' );
+		$token = isset( $_POST['github_token'] ) ? trim( (string) wp_unslash( $_POST['github_token'] ) ) : '';
+		if ( ! $this->credentials->is_valid( $token ) ) {
+			$this->redirect( 'token_invalid' );
+		}
+		$validated = $this->github->validate_token( $token );
+		if ( is_wp_error( $validated ) ) {
+			$this->redirect( 'token_invalid' );
+		}
+		$saved = $this->credentials->write( $token );
+		if ( is_wp_error( $saved ) ) {
+			$this->redirect( 'token_write_failed' );
+		}
+		$this->manager->scan( true );
+		delete_site_transient( 'update_plugins' );
+		delete_site_transient( 'update_themes' );
+		$this->redirect( 'token_saved' );
+	}
+
+	/** Remove only the plugin-directory credential file. */
+	public function handle_remove_token() {
+		$this->authorize( 'modern_catholic_updates_remove_token', 'manage_options' );
+		if ( ! $this->credentials->remove() ) {
+			$this->redirect( 'token_write_failed' );
+		}
+		$this->manager->scan( true );
+		delete_site_transient( 'update_plugins' );
+		delete_site_transient( 'update_themes' );
+		$this->redirect( 'token_removed' );
 	}
 
 	/** Save a manually trusted repository. */
@@ -250,6 +281,45 @@ final class Admin_Page {
 		}
 	}
 
+	/** Render private GitHub credential controls without revealing the token. */
+	private function render_credentials() {
+		$source_labels = array(
+			'wp-config.php'    => __( 'wp-config.php constant', 'modern-catholic-plugin-update-manager' ),
+			'environment'      => __( 'server environment variable', 'modern-catholic-plugin-update-manager' ),
+			'credential_file'  => __( 'plugin credential file', 'modern-catholic-plugin-update-manager' ),
+			'filter'           => __( 'secure integration filter', 'modern-catholic-plugin-update-manager' ),
+		);
+		$source       = $this->github->token_source();
+		$source_label = isset( $source_labels[ $source ] ) ? $source_labels[ $source ] : __( 'not configured', 'modern-catholic-plugin-update-manager' );
+		?>
+		<section class="mc-credentials">
+			<h2><?php esc_html_e( 'Private GitHub access', 'modern-catholic-plugin-update-manager' ); ?></h2>
+			<p><strong><?php esc_html_e( 'Active credential source:', 'modern-catholic-plugin-update-manager' ); ?></strong> <?php echo esc_html( $source_label ); ?></p>
+			<p><?php esc_html_e( 'Use a fine-grained personal access token limited to the required repositories with Contents set to Read-only. A saved token is written to the hidden .github-token.php file inside this plugin, never to WordPress options, and its value is never displayed again.', 'modern-catholic-plugin-update-manager' ); ?></p>
+			<p><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Create a fine-grained token on GitHub', 'modern-catholic-plugin-update-manager' ); ?></a></p>
+			<?php if ( current_user_can( 'manage_options' ) && $this->credentials->is_writable() ) : ?>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mc-token-form">
+					<input type="hidden" name="action" value="modern_catholic_updates_save_token">
+					<?php wp_nonce_field( 'modern_catholic_updates_save_token' ); ?>
+					<label for="modern-catholic-github-token"><strong><?php esc_html_e( 'GitHub token', 'modern-catholic-plugin-update-manager' ); ?></strong></label>
+					<input id="modern-catholic-github-token" name="github_token" type="password" required autocomplete="new-password" spellcheck="false" placeholder="github_pat_…">
+					<?php submit_button( $this->credentials->exists() ? __( 'Replace token file', 'modern-catholic-plugin-update-manager' ) : __( 'Save token file', 'modern-catholic-plugin-update-manager' ), 'secondary', 'submit', false ); ?>
+				</form>
+				<?php if ( $this->credentials->exists() ) : ?>
+					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mc-token-remove-form">
+						<input type="hidden" name="action" value="modern_catholic_updates_remove_token">
+						<?php wp_nonce_field( 'modern_catholic_updates_remove_token' ); ?>
+						<?php submit_button( __( 'Remove token file', 'modern-catholic-plugin-update-manager' ), 'delete', 'submit', false ); ?>
+					</form>
+				<?php endif; ?>
+			<?php elseif ( current_user_can( 'manage_options' ) ) : ?>
+				<div class="notice notice-error inline"><p><?php esc_html_e( 'The plugin directory is not writable, so the token file cannot be saved from WordPress.', 'modern-catholic-plugin-update-manager' ); ?></p></div>
+			<?php endif; ?>
+			<p class="description"><?php esc_html_e( 'The file is ignored by Git and excluded from release ZIPs. The updater restores it after a normal self-update; keep a secure copy because a manual folder replacement can remove it.', 'modern-catholic-plugin-update-manager' ); ?></p>
+		</section>
+		<?php
+	}
+
 	/** Render row actions. */
 	private function render_actions( $item ) {
 		$install_capability = 'theme' === $item['type'] ? 'install_themes' : 'install_plugins';
@@ -300,6 +370,10 @@ final class Admin_Page {
 			'repository_enabled'  => array( 'success', __( 'Repository monitoring enabled.', 'modern-catholic-plugin-update-manager' ) ),
 			'repository_disabled' => array( 'warning', __( 'Repository monitoring disabled.', 'modern-catholic-plugin-update-manager' ) ),
 			'repository_removed'  => array( 'success', __( 'Manual repository removed.', 'modern-catholic-plugin-update-manager' ) ),
+			'token_saved'         => array( 'success', __( 'Private GitHub access was verified and the token file was saved.', 'modern-catholic-plugin-update-manager' ) ),
+			'token_removed'       => array( 'success', __( 'The plugin token file was removed.', 'modern-catholic-plugin-update-manager' ) ),
+			'token_invalid'       => array( 'error', __( 'GitHub rejected the token or it cannot read the private Update Manager repository.', 'modern-catholic-plugin-update-manager' ) ),
+			'token_write_failed'  => array( 'error', __( 'WordPress could not write or remove the plugin token file.', 'modern-catholic-plugin-update-manager' ) ),
 			'installed'           => array( 'success', __( 'The latest release was installed. Activation remains under administrator control.', 'modern-catholic-plugin-update-manager' ) ),
 			'invalid_repository'  => array( 'error', __( 'The repository definition is invalid.', 'modern-catholic-plugin-update-manager' ) ),
 			'already_installed'   => array( 'warning', __( 'That component is already installed or is a protected Git checkout.', 'modern-catholic-plugin-update-manager' ) ),

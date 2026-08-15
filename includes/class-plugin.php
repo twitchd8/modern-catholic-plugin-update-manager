@@ -32,10 +32,13 @@ final class Plugin {
 		}
 		$this->booted = true;
 
+		$credentials = new Credential_File();
+		$credentials->ensure_placeholder();
+		$credentials->hooks();
 		$registry = new Repository_Registry();
-		$github   = new GitHub_Client();
+		$github   = new GitHub_Client( $credentials );
 		$manager  = new Update_Manager( $registry, $github );
-		$admin    = new Admin_Page( $registry, $github, $manager );
+		$admin    = new Admin_Page( $registry, $github, $manager, $credentials );
 
 		$manager->hooks();
 		$admin->hooks();
