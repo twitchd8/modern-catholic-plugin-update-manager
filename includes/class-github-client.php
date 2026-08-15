@@ -225,12 +225,16 @@ final class GitHub_Client {
 	}
 
 	/**
-	 * Retrieve a token from configuration or a filter.
+	 * Retrieve a token from wp-config.php, the process environment, or a filter.
 	 *
 	 * @return string
 	 */
 	private function token() {
 		$token = defined( 'MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN' ) ? (string) MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN : '';
+		if ( '' === trim( $token ) ) {
+			$environment_token = getenv( 'MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN' );
+			$token             = false === $environment_token ? '' : (string) $environment_token;
+		}
 		return trim( (string) apply_filters( 'modern_catholic_updates_github_token', $token ) );
 	}
 

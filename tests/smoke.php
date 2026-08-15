@@ -117,10 +117,28 @@ if ( empty( $results['items']['twitchd8/modern-catholic-theme']['development'] )
 mc_updates_smoke_pass( 'Registry scan and Git checkout protection are active.' );
 
 wp_set_current_user( 1 );
+$links = $admin->plugin_action_links( array() );
+if ( empty( $links[0] ) || false === strpos( $links[0], 'plugins.php?page=modern-catholic-updates' ) ) {
+	mc_updates_smoke_fail( 'Plugin-row management link does not target the Plugins submenu.' );
+}
+$admin->menu();
+global $submenu;
+$plugin_menu_found = false;
+foreach ( isset( $submenu['plugins.php'] ) ? $submenu['plugins.php'] : array() as $menu_item ) {
+	if ( isset( $menu_item[2] ) && 'modern-catholic-updates' === $menu_item[2] ) {
+		$plugin_menu_found = true;
+		break;
+	}
+}
+if ( ! $plugin_menu_found ) {
+	mc_updates_smoke_fail( 'Management page was not registered beneath Plugins.' );
+}
+mc_updates_smoke_pass( 'Management page and direct link are registered beneath Plugins.' );
+
 ob_start();
 $admin->render();
 $page = ob_get_clean();
-if ( false === strpos( $page, 'Add a trusted repository' ) || false === strpos( $page, 'Modern Catholic – Editorial Sections' ) ) {
+if ( false === strpos( $page, 'Add a trusted repository' ) || false === strpos( $page, 'Modern Catholic – Editorial Sections' ) || false === strpos( $page, 'Private GitHub repositories require a read-only token.' ) ) {
 	mc_updates_smoke_fail( 'Admin page did not render the registry controls and release.' );
 }
 mc_updates_smoke_pass( 'Admin management page renders repository controls and status.' );
