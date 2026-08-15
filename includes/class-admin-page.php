@@ -30,6 +30,7 @@ final class Admin_Page {
 		add_action( 'admin_menu', array( $this, 'menu' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
 		add_action( 'admin_notices', array( $this, 'update_notice' ) );
+		add_filter( 'plugin_action_links_' . plugin_basename( MODERN_CATHOLIC_UPDATE_MANAGER_FILE ), array( $this, 'plugin_action_links' ) );
 		add_action( 'admin_post_modern_catholic_updates_check', array( $this, 'handle_check' ) );
 		add_action( 'admin_post_modern_catholic_updates_save_repository', array( $this, 'handle_save_repository' ) );
 		add_action( 'admin_post_modern_catholic_updates_toggle_repository', array( $this, 'handle_toggle_repository' ) );
@@ -37,9 +38,9 @@ final class Admin_Page {
 		add_action( 'admin_post_modern_catholic_updates_install', array( $this, 'handle_install' ) );
 	}
 
-	/** Add the Tools page. */
+	/** Add the management page beneath Plugins. */
 	public function menu() {
-		add_management_page(
+		add_plugins_page(
 			__( 'Modern Catholic Updates', 'modern-catholic-plugin-update-manager' ),
 			__( 'Modern Catholic Updates', 'modern-catholic-plugin-update-manager' ),
 			'update_plugins',
@@ -50,10 +51,21 @@ final class Admin_Page {
 
 	/** Load page styles. */
 	public function assets( $hook ) {
-		if ( 'tools_page_modern-catholic-updates' !== $hook ) {
+		if ( 'plugins_page_modern-catholic-updates' !== $hook ) {
 			return;
 		}
 		wp_enqueue_style( 'modern-catholic-update-manager', MODERN_CATHOLIC_UPDATE_MANAGER_URL . 'assets/admin.css', array(), MODERN_CATHOLIC_UPDATE_MANAGER_VERSION );
+	}
+
+	/** Add a direct management link to the Plugins screen. */
+	public function plugin_action_links( $links ) {
+		$manage = sprintf(
+			'<a href="%1$s">%2$s</a>',
+			esc_url( admin_url( 'plugins.php?page=modern-catholic-updates' ) ),
+			esc_html__( 'Manage updates', 'modern-catholic-plugin-update-manager' )
+		);
+		array_unshift( $links, $manage );
+		return $links;
 	}
 
 	/** Render update notification. */
@@ -66,7 +78,7 @@ final class Admin_Page {
 		if ( ! $count ) {
 			return;
 		}
-		$url = admin_url( 'tools.php?page=modern-catholic-updates' );
+		$url = admin_url( 'plugins.php?page=modern-catholic-updates' );
 		printf(
 			'<div class="notice notice-warning"><p>%s</p></div>',
 			wp_kses_post( sprintf( _n( '%1$d Modern Catholic update is available. <a href="%2$s">Review updates</a>.', '%1$d Modern Catholic updates are available. <a href="%2$s">Review updates</a>.', $count, 'modern-catholic-plugin-update-manager' ), $count, esc_url( $url ) ) )
@@ -95,6 +107,14 @@ final class Admin_Page {
 					<?php submit_button( __( 'Check now', 'modern-catholic-plugin-update-manager' ), 'primary', 'submit', false ); ?>
 				</form>
 			</div>
+			<?php if ( ! $this->github->has_token() ) : ?>
+				<div class="notice notice-info inline">
+					<p><strong><?php esc_html_e( 'Private GitHub repositories require a read-only token.', 'modern-catholic-plugin-update-manager' ); ?></strong></p>
+					<p><?php esc_html_e( 'Create a fine-grained personal access token limited to the required repositories with Contents set to Read-only. Then define it in wp-config.php or provide the same name as a server environment variable. The token is never saved in WordPress options.', 'modern-catholic-plugin-update-manager' ); ?></p>
+					<p><code>define( 'MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN', 'github_pat_…' );</code></p>
+					<p><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Create a fine-grained token on GitHub', 'modern-catholic-plugin-update-manager' ); ?></a></p>
+				</div>
+			<?php endif; ?>
 
 			<table class="widefat striped mc-updates-table">
 				<thead><tr>
@@ -268,7 +288,7 @@ final class Admin_Page {
 
 	/** Redirect to the management page. */
 	private function redirect( $message ) {
-		wp_safe_redirect( add_query_arg( 'mc_updates_message', sanitize_key( $message ), admin_url( 'tools.php?page=modern-catholic-updates' ) ) );
+		wp_safe_redirect( add_query_arg( 'mc_updates_message', sanitize_key( $message ), admin_url( 'plugins.php?page=modern-catholic-updates' ) ) );
 		exit;
 	}
 

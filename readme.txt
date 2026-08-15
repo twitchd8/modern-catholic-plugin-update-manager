@@ -4,7 +4,7 @@ Tags: updates, github, plugins, themes
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 0.1.1
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -31,17 +31,21 @@ Public repositories require no credentials. For private repositories, create a f
 
 `define( 'MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN', 'your-read-only-token' );`
 
-The token is not stored in WordPress options or displayed in the administration screen. It may also be supplied through the `modern_catholic_updates_github_token` filter by a secure host-specific integration.
+The token is not stored in WordPress options or displayed in the administration screen. It may instead be supplied through a server environment variable named `MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN` or the `modern_catholic_updates_github_token` filter by a secure host-specific integration. The management page shows setup instructions and whether private access is configured.
 
 == Installation ==
 
 1. Upload the plugin ZIP through Plugins > Add Plugin > Upload Plugin.
 2. Activate Modern Catholic – Update Manager.
-3. Open Tools > Modern Catholic Updates.
+3. Open Plugins > Modern Catholic Updates, or select Manage updates on the plugin row.
 4. Configure private-repository access outside the plugin if needed.
 5. Use Check now to refresh release metadata.
 
 == Changelog ==
+
+= 0.1.1 =
+* Move the management page beneath Plugins and add a direct plugin-row management link.
+* Add private-repository setup guidance and secure server environment-variable token support.
 
 = 0.1.0 =
 * Initial GitHub release monitoring, native updates, protected Git checkout detection, repository discovery, manual registry, installation, and digest verification.
