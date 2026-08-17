@@ -17,7 +17,8 @@ Trusted GitHub Release discovery, installation, and native WordPress update inte
 ## Features
 
 - Discovers conventionally named Modern Catholic plugin and theme repositories from trusted GitHub owners
-- Monitors built-in and administrator-managed repository definitions
+- Maintains one administrator-managed module list with add and remove controls
+- Shows the trusted GitHub catalog only from the dedicated Add module view
 - Accepts stable, non-draft, non-prerelease GitHub Releases only
 - Requires an exact installable `{slug}-{version}.zip` release asset
 - Registers eligible releases with WordPress’s native plugin and theme update interfaces
@@ -50,6 +51,12 @@ Local component directories containing `.git` are intentionally protected. Valid
 ---
 
 ## Changelog
+
+### Unreleased
+
+- Simplify the administration screen to one managed module list and an on-demand Add module view.
+- Allow built-in, discovered, and custom repositories to be removed and added back.
+- Retire Editorial Sections from the built-in module defaults.
 
 ### 1.0.1
 

@@ -15,8 +15,8 @@ Monitors trusted GitHub Releases and integrates exact release ZIP assets with Wo
 Modern Catholic – Update Manager monitors registered GitHub repositories for stable releases. It can:
 
 * Auto-detect installed plugins and themes that reference a trusted GitHub owner.
-* Monitor the built-in Modern Catholic component registry.
-* Add, disable, enable, and remove future repository definitions.
+* Maintain one administrator-managed module list with add and remove controls.
+* Show the trusted GitHub catalog only from the dedicated Add module view.
 * Notify administrators when a newer release is available.
 * Register updates with WordPress's native update screen.
 * Install the latest release of a registered component that is not installed.
@@ -43,6 +43,11 @@ Read-only deployments may instead define `MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN` 
 5. Use Check now to refresh release metadata.
 
 == Changelog ==
+
+= Unreleased =
+* Simplify the administration screen to one managed module list and an on-demand Add module view.
+* Allow built-in, discovered, and custom repositories to be removed and added back.
+* Retire Editorial Sections from the built-in module defaults.
 
 = 1.0.1 =
 * Standardize the GitHub README with Modern Catholic branding, compatibility badges, security guidance, and GPL-3.0-only licensing.
