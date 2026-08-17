@@ -96,6 +96,48 @@ if ( ! $renamed_plugin_state['installed'] || 'modern-catholic-plugin-parish-even
 }
 mc_updates_smoke_pass( 'Installed plugins remain detectable after a main-file rename.' );
 
+$candidate_resolver = new ReflectionMethod( Update_Manager::class, 'resolve_plugin_candidate' );
+$candidate_repo     = array(
+	'id'             => 'twitchd8/modern-catholic-plugin-candidate-test',
+	'repository_url' => 'https://github.com/twitchd8/modern-catholic-plugin-candidate-test',
+	'slug'           => 'modern-catholic-plugin-candidate-test',
+	'entrypoint'     => 'missing.php',
+);
+$metadata_match     = $candidate_resolver->invoke(
+	$manager,
+	$candidate_repo,
+	array(
+		'modern-catholic-plugin-candidate-test/wrong.php' => array( 'Name' => 'Wrong plugin', 'Version' => '1.0.0' ),
+		'modern-catholic-plugin-candidate-test/right.php' => array( 'Name' => 'Right plugin', 'Version' => '2.0.0', 'UpdateURI' => $candidate_repo['repository_url'] ),
+	)
+);
+if ( 'modern-catholic-plugin-candidate-test/right.php' !== $metadata_match['file'] ) {
+	mc_updates_smoke_fail( 'Stale-entrypoint fallback ignored matching repository metadata.' );
+}
+$root_match = $candidate_resolver->invoke(
+	$manager,
+	$candidate_repo,
+	array(
+		'modern-catholic-plugin-candidate-test/includes/helper.php' => array( 'Name' => 'Helper', 'Version' => '1.0.0' ),
+		'modern-catholic-plugin-candidate-test/main.php'            => array( 'Name' => 'Main plugin', 'Version' => '2.0.0' ),
+	)
+);
+if ( 'modern-catholic-plugin-candidate-test/main.php' !== $root_match['file'] ) {
+	mc_updates_smoke_fail( 'Stale-entrypoint fallback did not prefer the sole root-level plugin file.' );
+}
+$ambiguous_match = $candidate_resolver->invoke(
+	$manager,
+	$candidate_repo,
+	array(
+		'modern-catholic-plugin-candidate-test/first.php'  => array( 'Name' => 'First plugin', 'Version' => '1.0.0' ),
+		'modern-catholic-plugin-candidate-test/second.php' => array( 'Name' => 'Second plugin', 'Version' => '2.0.0' ),
+	)
+);
+if ( ! empty( $ambiguous_match['file'] ) || empty( $ambiguous_match['error'] ) ) {
+	mc_updates_smoke_fail( 'Ambiguous plugin headers were assigned to an arbitrary native update row.' );
+}
+mc_updates_smoke_pass( 'Plugin entrypoint fallback is deterministic and refuses ambiguous update targets.' );
+
 $runtime_token = getenv( 'MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN' );
 if ( false !== $runtime_token && '' !== trim( (string) $runtime_token ) ) {
 	$validated_token = $github->validate_token( $runtime_token );
@@ -349,6 +391,14 @@ remove_filter( 'pre_http_request', $stub_installer_release, 10 );
 remove_filter( 'modern_catholic_updates_repositories', $inject_installer_repository );
 if ( false === strpos( $installer_page, 'request-filesystem-credentials-form' ) || false === strpos( $installer_page, 'name="hostname"' ) ) {
 	mc_updates_smoke_fail( 'The installer did not expose WordPress filesystem credentials on a restricted host.' );
+}
+if ( ! preg_match( '/<form action="([^"]+)" method="post">\s*<div id="request-filesystem-credentials-form"/', $installer_page, $credential_form ) ) {
+	mc_updates_smoke_fail( 'The WordPress filesystem credential form action could not be verified.' );
+}
+$credential_action = html_entity_decode( $credential_form[1], ENT_QUOTES, 'UTF-8' );
+parse_str( (string) wp_parse_url( $credential_action, PHP_URL_QUERY ), $credential_query );
+if ( 'modern-catholic-updates' !== ( $credential_query['page'] ?? '' ) || 'install' !== ( $credential_query['mc_updates_view'] ?? '' ) || $installer_repository['id'] !== ( $credential_query['repository'] ?? '' ) || ! wp_verify_nonce( $credential_query['_wpnonce'] ?? '', 'modern_catholic_updates_install_package_' . $installer_repository['id'] ) ) {
+	mc_updates_smoke_fail( 'The filesystem credential form did not preserve its repository-specific installer request.' );
 }
 mc_updates_smoke_pass( 'Restricted-host installs use WordPress filesystem credential handling.' );
 

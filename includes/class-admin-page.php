@@ -364,6 +364,7 @@ final class Admin_Page {
 			'not_installed'       => __( 'Ready to install', 'modern-catholic-plugin-update-manager' ),
 			'development_update'  => __( 'New release; Git checkout protected', 'modern-catholic-plugin-update-manager' ),
 			'development_current' => __( 'Git checkout protected', 'modern-catholic-plugin-update-manager' ),
+			'component_detection_ambiguous' => __( 'Plugin entrypoint needs configuration', 'modern-catholic-plugin-update-manager' ),
 			'release_not_found'   => __( 'No published release', 'modern-catholic-plugin-update-manager' ),
 			'missing_release_asset' => __( 'Release asset missing', 'modern-catholic-plugin-update-manager' ),
 		);
@@ -439,7 +440,7 @@ final class Admin_Page {
 					<?php foreach ( $results['items'] as $item ) : ?>
 						<tr>
 							<td><strong><?php echo esc_html( $item['name'] ); ?></strong> <span class="mc-type"><?php echo esc_html( $item['type'] ); ?></span><br><a href="<?php echo esc_url( $item['repository_url'] ); ?>" target="_blank" rel="noopener noreferrer"><code><?php echo esc_html( $item['id'] ); ?></code></a></td>
-							<td><?php echo $item['installed'] ? esc_html( $item['installed_version'] ) : '&mdash;'; ?></td>
+							<td><?php echo $item['installed'] && $item['installed_version'] ? esc_html( $item['installed_version'] ) : '&mdash;'; ?></td>
 							<td><?php echo isset( $item['release']['version'] ) ? esc_html( $item['release']['version'] ) : '&mdash;'; ?></td>
 							<td><?php $this->render_status( $item ); ?></td>
 							<td><?php $this->render_actions( $item ); ?></td>
