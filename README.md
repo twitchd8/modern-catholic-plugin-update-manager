@@ -52,7 +52,7 @@ Local component directories containing `.git` are intentionally protected. Valid
 
 ## Changelog
 
-### Unreleased
+### 1.0.2
 
 - Detect installed plugins by their canonical directory when a saved main-file name is stale, while still preferring the configured entrypoint.
 - Run package installs through WordPress's interactive plugin and theme installer screens so restricted hosts can request filesystem credentials and display the underlying installation error.

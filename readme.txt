@@ -4,7 +4,7 @@ Tags: updates, github, plugins, themes
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.0.1
+Stable tag: 1.0.2
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -44,7 +44,7 @@ Read-only deployments may instead define `MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN` 
 
 == Changelog ==
 
-= Unreleased =
+= 1.0.2 =
 * Detect installed plugins by their canonical directory when a saved main-file name is stale, while still preferring the configured entrypoint.
 * Run package installs through WordPress's interactive plugin and theme installer screens so restricted hosts can request filesystem credentials and display the underlying installation error.
 
