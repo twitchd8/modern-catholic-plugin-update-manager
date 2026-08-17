@@ -259,8 +259,14 @@ ob_start();
 $admin->render();
 $add_page = ob_get_clean();
 unset( $_GET['mc_updates_view'] );
-if ( false === strpos( $add_page, '>Add module<' ) || false === strpos( $add_page, 'Available module' ) || false === strpos( $add_page, 'Refresh available modules' ) || false === strpos( $add_page, 'Add a repository not shown above' ) || false === strpos( $add_page, 'modern_catholic_updates_catalog_add' ) ) {
+if ( false === strpos( $add_page, '>Add module<' ) || false === strpos( $add_page, 'Refresh available modules' ) || false === strpos( $add_page, 'Add a repository not shown above' ) || false === strpos( $add_page, 'mc-repository-form' ) ) {
 	mc_updates_smoke_fail( 'Add module view did not render available and custom repository controls.' );
+}
+if ( false === strpos( $add_page, 'mc-catalog-table' ) && false === strpos( $add_page, 'There are no additional modules available to add.' ) ) {
+	mc_updates_smoke_fail( 'Add module view rendered neither the available catalog nor its empty state.' );
+}
+if ( false !== strpos( $add_page, 'mc-catalog-table' ) && false === strpos( $add_page, 'modern_catholic_updates_catalog_add' ) ) {
+	mc_updates_smoke_fail( 'Available catalog rows did not include an Add module action.' );
 }
 if ( false !== strpos( $add_page, 'mc-updates-table' ) ) {
 	mc_updates_smoke_fail( 'Add module view rendered the managed module table at the same time.' );

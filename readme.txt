@@ -44,12 +44,10 @@ Read-only deployments may instead define `MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN` 
 
 == Changelog ==
 
-= Unreleased =
+= 1.0.1 =
 * Simplify the administration screen to one managed module list and an on-demand Add module view.
 * Allow built-in, discovered, and custom repositories to be removed and added back.
 * Retire Editorial Sections from the built-in module defaults.
-
-= 1.0.1 =
 * Standardize the GitHub README with Modern Catholic branding, compatibility badges, security guidance, and GPL-3.0-only licensing.
 
 = 1.0.0 =
