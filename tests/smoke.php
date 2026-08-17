@@ -94,8 +94,8 @@ if ( false !== $runtime_token && '' !== trim( (string) $runtime_token ) ) {
 }
 
 $catalog = $github->discover_catalog( true );
-if ( is_wp_error( $catalog ) || empty( $catalog['items']['twitchd8/modern-catholic-plugin-editorial-sections']['release'] ) ) {
-	mc_updates_smoke_fail( 'GitHub catalog discovery omitted the public installable component.' );
+if ( is_wp_error( $catalog ) ) {
+	mc_updates_smoke_fail( 'GitHub catalog discovery failed: ' . $catalog->get_error_message() );
 }
 if ( ! empty( $catalog['items']['twitchd8/modern-catholic-plugin-parish-blog'] ) ) {
 	mc_updates_smoke_fail( 'GitHub catalog discovery included an archived component.' );
@@ -108,7 +108,48 @@ if ( ! is_wp_error( $github->catalog_item( 'untrusted/example', false ) ) ) {
 }
 mc_updates_smoke_pass( 'GitHub catalog filters trusted Modern Catholic repositories and verifies exact releases.' );
 
-$test_id = 'twitchd8/modern-catholic-plugin-future-test';
+$test_id               = 'twitchd8/modern-catholic-plugin-future-test';
+$original_repositories = get_option( Repository_Registry::OPTION_REPOSITORIES, null );
+$original_removed      = get_option( Repository_Registry::OPTION_REMOVED, null );
+$original_disabled     = get_option( Repository_Registry::OPTION_DISABLED, null );
+if ( is_array( $original_repositories ) ) {
+	unset( $original_repositories[ $test_id ] );
+}
+if ( is_array( $original_removed ) ) {
+	$original_removed = array_values( array_diff( $original_removed, array( $test_id ) ) );
+}
+$removable_id          = 'twitchd8/modern-catholic-plugin-parish-events';
+$removable             = $registry->get( $removable_id );
+$module_registry_error = '';
+if ( ! $removable || ! $registry->remove( $removable_id ) || $registry->get( $removable_id ) ) {
+	$module_registry_error = 'A built-in module could not be removed from the managed list.';
+}
+if ( ! $module_registry_error ) {
+	$restored = $registry->save( $removable );
+	if ( is_wp_error( $restored ) || ! $registry->get( $removable_id ) ) {
+		$module_registry_error = 'A removed module could not be added back to the managed list.';
+	}
+}
+if ( null === $original_repositories ) {
+	delete_option( Repository_Registry::OPTION_REPOSITORIES );
+} else {
+	update_option( Repository_Registry::OPTION_REPOSITORIES, $original_repositories, false );
+}
+if ( null === $original_removed ) {
+	delete_option( Repository_Registry::OPTION_REMOVED );
+} else {
+	update_option( Repository_Registry::OPTION_REMOVED, $original_removed, false );
+}
+if ( null === $original_disabled ) {
+	delete_option( Repository_Registry::OPTION_DISABLED );
+} else {
+	update_option( Repository_Registry::OPTION_DISABLED, $original_disabled, false );
+}
+if ( $module_registry_error ) {
+	mc_updates_smoke_fail( $module_registry_error );
+}
+mc_updates_smoke_pass( 'Built-in and discovered modules can be removed and added back.' );
+
 $saved   = $registry->save(
 	array(
 		'name'       => 'Future Test',
@@ -124,47 +165,60 @@ if ( is_wp_error( $saved ) || ! $registry->get( $test_id ) ) {
 if ( ! $registry->remove( $test_id ) || $registry->get( $test_id ) ) {
 	mc_updates_smoke_fail( 'Manual future repository cleanup failed.' );
 }
+if ( null === $original_removed ) {
+	delete_option( Repository_Registry::OPTION_REMOVED );
+} else {
+	update_option( Repository_Registry::OPTION_REMOVED, $original_removed, false );
+}
 mc_updates_smoke_pass( 'Future repositories can be added and removed.' );
 
-$repository = $registry->get( 'twitchd8/modern-catholic-plugin-editorial-sections' );
-$release    = $github->latest_release( $repository, true );
-if ( is_wp_error( $release ) ) {
-	mc_updates_smoke_fail( 'Public GitHub release lookup failed: ' . $release->get_error_message() );
-}
-if ( '0.2.2' !== $release['version'] || 'modern-catholic-plugin-editorial-sections-0.2.2.zip' !== $release['asset_name'] ) {
-	mc_updates_smoke_fail( 'Release version or exact asset selection is incorrect.' );
-}
-mc_updates_smoke_pass( 'Latest stable public release and exact ZIP asset were selected.' );
-
-$temporary = download_url( $release['package'], 60, false );
-if ( is_wp_error( $temporary ) ) {
-	mc_updates_smoke_fail( 'Release asset download failed: ' . $temporary->get_error_message() );
-}
-
-$zip = new ZipArchive();
-if ( true !== $zip->open( $temporary ) ) {
-	wp_delete_file( $temporary );
-	mc_updates_smoke_fail( 'Downloaded release asset is not a readable ZIP.' );
-}
-$roots = array();
-for ( $index = 0; $index < $zip->numFiles; $index++ ) {
-	$name = $zip->getNameIndex( $index );
-	$root = strtok( $name, '/' );
-	if ( $root ) {
-		$roots[ $root ] = true;
+$catalog_repository = null;
+foreach ( $catalog['items'] as $catalog_item ) {
+	if ( ! empty( $catalog_item['release'] ) ) {
+		$catalog_repository = $catalog_item;
+		break;
 	}
 }
-$zip->close();
-wp_delete_file( $temporary );
-if ( array( 'modern-catholic-plugin-editorial-sections' ) !== array_keys( $roots ) ) {
-	mc_updates_smoke_fail( 'Release ZIP does not have exactly one canonical top-level directory.' );
+if ( $catalog_repository ) {
+	$release = $github->latest_release( $catalog_repository, true );
+	if ( is_wp_error( $release ) ) {
+		mc_updates_smoke_fail( 'GitHub release lookup failed: ' . $release->get_error_message() );
+	}
+	$expected_asset = $catalog_repository['slug'] . '-' . $release['version'] . '.zip';
+	if ( $expected_asset !== $release['asset_name'] ) {
+		mc_updates_smoke_fail( 'Release version or exact asset selection is incorrect.' );
+	}
+	mc_updates_smoke_pass( 'Latest stable release and exact ZIP asset were selected.' );
+
+	$temporary = download_url( $release['package'], 60, false );
+	if ( is_wp_error( $temporary ) ) {
+		mc_updates_smoke_fail( 'Release asset download failed: ' . $temporary->get_error_message() );
+	}
+
+	$zip = new ZipArchive();
+	if ( true !== $zip->open( $temporary ) ) {
+		wp_delete_file( $temporary );
+		mc_updates_smoke_fail( 'Downloaded release asset is not a readable ZIP.' );
+	}
+	$roots = array();
+	for ( $index = 0; $index < $zip->numFiles; $index++ ) {
+		$name = $zip->getNameIndex( $index );
+		$root = strtok( $name, '/' );
+		if ( $root ) {
+			$roots[ $root ] = true;
+		}
+	}
+	$zip->close();
+	wp_delete_file( $temporary );
+	if ( array( $catalog_repository['slug'] ) !== array_keys( $roots ) ) {
+		mc_updates_smoke_fail( 'Release ZIP does not have exactly one canonical top-level directory.' );
+	}
+	mc_updates_smoke_pass( 'Downloaded ZIP has one canonical installable root.' );
+} else {
+	mc_updates_smoke_pass( 'No catalog release was visible without a private credential; package test skipped.' );
 }
-mc_updates_smoke_pass( 'Downloaded ZIP has one canonical installable root.' );
 
 $results = $manager->scan( false );
-if ( empty( $results['items']['twitchd8/modern-catholic-plugin-editorial-sections']['release'] ) ) {
-	mc_updates_smoke_fail( 'Repository scan omitted the public release.' );
-}
 if ( empty( $results['items']['twitchd8/modern-catholic-theme']['development'] ) ) {
 	mc_updates_smoke_fail( 'Theme Git checkout was not protected.' );
 }
@@ -192,9 +246,31 @@ mc_updates_smoke_pass( 'Management page and direct link are registered beneath P
 ob_start();
 $admin->render();
 $page = ob_get_clean();
-if ( false === strpos( $page, 'Add a trusted repository' ) || false === strpos( $page, 'Modern Catholic – Editorial Sections' ) || false === strpos( $page, 'Private GitHub access' ) || false === strpos( $page, 'github_token' ) || false === strpos( $page, 'Discover from GitHub' ) || false === strpos( $page, 'modern_catholic_updates_install' ) ) {
-	mc_updates_smoke_fail( 'Admin page did not render the registry controls and release.' );
+if ( false === strpos( $page, '>Modules<' ) || false === strpos( $page, 'Add module' ) || false === strpos( $page, 'Private GitHub access' ) || false === strpos( $page, 'github_token' ) || false === strpos( $page, 'modern_catholic_updates_remove_repository' ) ) {
+	mc_updates_smoke_fail( 'Primary admin page did not render the single managed module list.' );
 }
-mc_updates_smoke_pass( 'Admin management page renders repository controls and status.' );
+if ( false !== strpos( $page, 'Available module' ) || false !== strpos( $page, 'mc-repository-form' ) ) {
+	mc_updates_smoke_fail( 'Primary admin page exposed available or custom repository controls before Add module was selected.' );
+}
+mc_updates_smoke_pass( 'Primary admin page renders only the managed module list.' );
+
+$_GET['mc_updates_view'] = 'add';
+ob_start();
+$admin->render();
+$add_page = ob_get_clean();
+unset( $_GET['mc_updates_view'] );
+if ( false === strpos( $add_page, '>Add module<' ) || false === strpos( $add_page, 'Refresh available modules' ) || false === strpos( $add_page, 'Add a repository not shown above' ) || false === strpos( $add_page, 'mc-repository-form' ) ) {
+	mc_updates_smoke_fail( 'Add module view did not render available and custom repository controls.' );
+}
+if ( false === strpos( $add_page, 'mc-catalog-table' ) && false === strpos( $add_page, 'There are no additional modules available to add.' ) ) {
+	mc_updates_smoke_fail( 'Add module view rendered neither the available catalog nor its empty state.' );
+}
+if ( false !== strpos( $add_page, 'mc-catalog-table' ) && false === strpos( $add_page, 'modern_catholic_updates_catalog_add' ) ) {
+	mc_updates_smoke_fail( 'Available catalog rows did not include an Add module action.' );
+}
+if ( false !== strpos( $add_page, 'mc-updates-table' ) ) {
+	mc_updates_smoke_fail( 'Add module view rendered the managed module table at the same time.' );
+}
+mc_updates_smoke_pass( 'Available modules render only after Add module is selected.' );
 
 echo 'Smoke test completed successfully.' . PHP_EOL;

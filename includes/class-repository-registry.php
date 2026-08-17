@@ -14,6 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 final class Repository_Registry {
 	const OPTION_REPOSITORIES = 'modern_catholic_updates_repositories';
 	const OPTION_DISABLED     = 'modern_catholic_updates_disabled';
+	const OPTION_REMOVED      = 'modern_catholic_updates_removed';
 	const OPTION_OWNERS       = 'modern_catholic_updates_trusted_owners';
 
 	/**
@@ -40,6 +41,16 @@ final class Repository_Registry {
 			}
 		}
 
+		/**
+		 * Filters the complete trusted repository registry.
+		 *
+		 * @param array<string,array<string,mixed>> $repositories Repositories keyed by owner/name.
+		 */
+		$repositories = apply_filters( 'modern_catholic_updates_repositories', $repositories );
+		$removed      = get_option( self::OPTION_REMOVED, array() );
+		$removed      = is_array( $removed ) ? array_map( 'strtolower', $removed ) : array();
+		$repositories = array_diff_key( $repositories, array_fill_keys( $removed, true ) );
+
 		$disabled = get_option( self::OPTION_DISABLED, array() );
 		$disabled = is_array( $disabled ) ? array_map( 'strtolower', $disabled ) : array();
 
@@ -50,12 +61,7 @@ final class Repository_Registry {
 
 		ksort( $repositories );
 
-		/**
-		 * Filters the complete trusted repository registry.
-		 *
-		 * @param array<string,array<string,mixed>> $repositories Repositories keyed by owner/name.
-		 */
-		return apply_filters( 'modern_catholic_updates_repositories', $repositories );
+		return $repositories;
 	}
 
 	/**
@@ -86,28 +92,45 @@ final class Repository_Registry {
 		$manual = is_array( $manual ) ? $manual : array();
 		$manual[ $repository['id'] ] = $repository;
 		update_option( self::OPTION_REPOSITORIES, $manual, false );
+		$this->remove_from_option_list( self::OPTION_REMOVED, $repository['id'] );
+		$this->remove_from_option_list( self::OPTION_DISABLED, $repository['id'] );
 
 		return $repository;
 	}
 
 	/**
-	 * Remove a manually managed repository.
+	 * Remove a repository from the managed module list.
 	 *
 	 * @param string $id Repository owner/name.
 	 * @return bool
 	 */
 	public function remove( $id ) {
 		$id     = strtolower( trim( (string) $id ) );
-		$manual = get_option( self::OPTION_REPOSITORIES, array() );
-		$manual = is_array( $manual ) ? $manual : array();
-
-		if ( ! isset( $manual[ $id ] ) ) {
+		if ( ! $id || ! $this->get( $id ) ) {
 			return false;
 		}
 
-		unset( $manual[ $id ] );
-		update_option( self::OPTION_REPOSITORIES, $manual, false );
+		$manual = get_option( self::OPTION_REPOSITORIES, array() );
+		$manual = is_array( $manual ) ? $manual : array();
+		if ( isset( $manual[ $id ] ) ) {
+			unset( $manual[ $id ] );
+			update_option( self::OPTION_REPOSITORIES, $manual, false );
+		}
+
+		$removed = get_option( self::OPTION_REMOVED, array() );
+		$removed = is_array( $removed ) ? array_map( 'strtolower', $removed ) : array();
+		$removed[] = $id;
+		update_option( self::OPTION_REMOVED, array_values( array_unique( $removed ) ), false );
+		$this->remove_from_option_list( self::OPTION_DISABLED, $id );
 		return true;
+	}
+
+	/** Remove one repository ID from an option-backed list. */
+	private function remove_from_option_list( $option, $id ) {
+		$values = get_option( $option, array() );
+		$values = is_array( $values ) ? array_map( 'strtolower', $values ) : array();
+		$values = array_values( array_diff( $values, array( strtolower( $id ) ) ) );
+		update_option( $option, $values, false );
 	}
 
 	/**
@@ -144,7 +167,6 @@ final class Repository_Registry {
 			array( 'name' => 'Modern Catholic – Parish Events', 'repository' => 'twitchd8/modern-catholic-plugin-parish-events', 'type' => 'plugin', 'slug' => 'modern-catholic-plugin-parish-events', 'entrypoint' => 'parishpress-events.php' ),
 			array( 'name' => 'Modern Catholic – Parish Homilies', 'repository' => 'twitchd8/modern-catholic-plugin-parish-homilies', 'type' => 'plugin', 'slug' => 'modern-catholic-plugin-parish-homilies', 'entrypoint' => 'parishpress-homilies.php' ),
 			array( 'name' => 'Modern Catholic – Today’s Readings', 'repository' => 'twitchd8/modern-catholic-plugin-todays-readings', 'type' => 'plugin', 'slug' => 'modern-catholic-plugin-todays-readings', 'entrypoint' => 'usccb-todays-readings.php' ),
-			array( 'name' => 'Modern Catholic – Editorial Sections', 'repository' => 'twitchd8/modern-catholic-plugin-editorial-sections', 'type' => 'plugin', 'slug' => 'modern-catholic-plugin-editorial-sections', 'entrypoint' => 'editorial-sections.php' ),
 			array( 'name' => 'Modern Catholic – Update Manager', 'repository' => 'twitchd8/modern-catholic-plugin-update-manager', 'type' => 'plugin', 'slug' => 'modern-catholic-plugin-update-manager', 'entrypoint' => 'modern-catholic-update-manager.php' ),
 		);
 

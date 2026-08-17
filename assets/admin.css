@@ -29,6 +29,10 @@
 	margin: 1.5rem 0;
 }
 
+.modern-catholic-updates .mc-modules {
+	margin: 1.5rem 0;
+}
+
 .modern-catholic-updates .mc-section-heading {
 	display: flex;
 	align-items: end;
@@ -42,6 +46,31 @@
 
 .modern-catholic-updates .mc-section-heading p {
 	margin-top: 0;
+}
+
+.modern-catholic-updates .mc-discover-form {
+	margin: 0 0 1rem;
+}
+
+.modern-catholic-updates .mc-discover-form .submit {
+	margin: 0;
+}
+
+.modern-catholic-updates .mc-empty-state,
+.modern-catholic-updates .mc-custom-repository {
+	max-width: 70rem;
+	padding: 1rem;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+}
+
+.modern-catholic-updates .mc-custom-repository {
+	margin-top: 1.5rem;
+}
+
+.modern-catholic-updates .mc-custom-repository summary {
+	cursor: pointer;
+	font-weight: 600;
 }
 
 .modern-catholic-updates .mc-token-form {
