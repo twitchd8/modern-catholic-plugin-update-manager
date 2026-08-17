@@ -99,8 +99,14 @@ final class Admin_Page {
 			wp_die( esc_html__( 'You do not have permission to manage updates.', 'modern-catholic-plugin-update-manager' ) );
 		}
 
+		$view = isset( $_GET['mc_updates_view'] ) ? sanitize_key( wp_unslash( $_GET['mc_updates_view'] ) ) : '';
+		if ( 'install' === $view ) {
+			$this->render_installer();
+			return;
+		}
+
 		$results  = $this->manager->scan( false );
-		$add_mode = isset( $_GET['mc_updates_view'] ) && 'add' === sanitize_key( wp_unslash( $_GET['mc_updates_view'] ) );
+		$add_mode = 'add' === $view;
 		$catalog  = $add_mode ? $this->github->discover_catalog( false ) : null;
 		$message  = isset( $_GET['mc_updates_message'] ) ? sanitize_key( wp_unslash( $_GET['mc_updates_message'] ) ) : '';
 		?>
@@ -204,7 +210,7 @@ final class Admin_Page {
 		if ( is_wp_error( $saved ) ) {
 			$this->redirect( 'catalog_repository_invalid' );
 		}
-		$this->install_repository( $this->registry->get( $repository['id'] ) );
+		$this->redirect_to_installer( $repository['id'] );
 	}
 
 	/** Save a manually trusted repository. */
@@ -252,30 +258,101 @@ final class Admin_Page {
 		if ( ! current_user_can( $install_capability ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'modern-catholic-plugin-update-manager' ) );
 		}
-		$this->install_repository( $repository );
+		$this->redirect_to_installer( $repository['id'] );
 	}
 
-	/** Download and install one trusted repository's latest exact release asset. */
-	private function install_repository( $repository ) {
+	/** Redirect an authorized request into WordPress's interactive installer screen. */
+	private function redirect_to_installer( $repository_id ) {
+		$action = $this->installer_nonce_action( $repository_id );
+		$url    = add_query_arg(
+			array(
+				'page'            => 'modern-catholic-updates',
+				'mc_updates_view' => 'install',
+				'repository'      => $repository_id,
+			),
+			admin_url( 'plugins.php' )
+		);
+		wp_safe_redirect( wp_nonce_url( $url, $action ) );
+		exit;
+	}
+
+	/** Run one trusted release through WordPress's normal interactive installer UI. */
+	private function render_installer() {
+		$id         = isset( $_GET['repository'] ) ? sanitize_text_field( wp_unslash( $_GET['repository'] ) ) : '';
+		$repository = $this->registry->get( $id );
+		if ( ! $repository || ! $repository['enabled'] ) {
+			$this->render_installer_error( __( 'That repository is not registered or is not enabled.', 'modern-catholic-plugin-update-manager' ) );
+			return;
+		}
+
+		check_admin_referer( $this->installer_nonce_action( $repository['id'] ) );
+		$install_capability = 'theme' === $repository['type'] ? 'install_themes' : 'install_plugins';
+		if ( ! current_user_can( $install_capability ) ) {
+			wp_die( esc_html__( 'You do not have permission to perform this action.', 'modern-catholic-plugin-update-manager' ) );
+		}
+
 		$state = $this->manager->component_state( $repository );
 		if ( $state['installed'] || $state['development'] ) {
-			$this->redirect( 'already_installed' );
+			$this->render_installer_error( __( 'That component is already installed or is a protected Git checkout.', 'modern-catholic-plugin-update-manager' ) );
+			return;
 		}
 		$release = $this->github->latest_release( $repository, true );
 		if ( is_wp_error( $release ) ) {
-			$this->redirect( 'install_failed' );
+			$this->render_installer_error( $release->get_error_message() );
+			return;
 		}
 
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
-		$skin = new \Automatic_Upgrader_Skin();
+		$url       = add_query_arg(
+			array(
+				'page'            => 'modern-catholic-updates',
+				'mc_updates_view' => 'install',
+				'repository'      => $repository['id'],
+			),
+			admin_url( 'plugins.php' )
+		);
+		$skin_args = array(
+			'type'  => 'web',
+			'url'   => $url,
+			'nonce' => $this->installer_nonce_action( $repository['id'] ),
+			'title' => sprintf( __( 'Installing %s', 'modern-catholic-plugin-update-manager' ), $repository['name'] ),
+			'api'   => (object) array(
+				'name'    => $repository['name'],
+				'version' => $release['version'],
+			),
+		);
 		if ( 'theme' === $repository['type'] ) {
-			$upgrader = new \Theme_Upgrader( $skin );
+			$skin_args['theme'] = $repository['slug'];
+			$skin               = new \Theme_Installer_Skin( $skin_args );
+			$upgrader           = new \Theme_Upgrader( $skin );
 		} else {
-			$upgrader = new \Plugin_Upgrader( $skin );
+			$skin_args['plugin'] = $repository['slug'];
+			$skin                = new \Plugin_Installer_Skin( $skin_args );
+			$upgrader            = new \Plugin_Upgrader( $skin );
 		}
-		$result = $upgrader->install( $release['package'] );
-		$this->redirect( is_wp_error( $result ) || ! $result ? 'install_failed' : 'installed' );
+		$upgrader->install( $release['package'] );
+		printf(
+			'<p><a href="%1$s">%2$s</a></p>',
+			esc_url( admin_url( 'plugins.php?page=modern-catholic-updates' ) ),
+			esc_html__( 'Back to Modern Catholic Updates', 'modern-catholic-plugin-update-manager' )
+		);
+	}
+
+	/** Render an installer-specific error without hiding its actual cause. */
+	private function render_installer_error( $message ) {
+		?>
+		<div class="wrap modern-catholic-updates">
+			<h1><?php esc_html_e( 'Modern Catholic Updates', 'modern-catholic-plugin-update-manager' ); ?></h1>
+			<div class="notice notice-error inline"><p><?php echo esc_html( $message ); ?></p></div>
+			<p><a href="<?php echo esc_url( admin_url( 'plugins.php?page=modern-catholic-updates' ) ); ?>"><?php esc_html_e( 'Back to modules', 'modern-catholic-plugin-update-manager' ); ?></a></p>
+		</div>
+		<?php
+	}
+
+	/** Return the per-repository nonce action for interactive installer requests. */
+	private function installer_nonce_action( $repository_id ) {
+		return 'modern_catholic_updates_install_package_' . $repository_id;
 	}
 
 	/** Render a status cell. */
@@ -520,10 +597,8 @@ final class Admin_Page {
 			'token_removed'       => array( 'success', __( 'The plugin token file was removed.', 'modern-catholic-plugin-update-manager' ) ),
 			'token_invalid'       => array( 'error', __( 'GitHub rejected the token or it cannot read the private Update Manager repository.', 'modern-catholic-plugin-update-manager' ) ),
 			'token_write_failed'  => array( 'error', __( 'WordPress could not write or remove the plugin token file.', 'modern-catholic-plugin-update-manager' ) ),
-			'installed'           => array( 'success', __( 'The latest release was installed. Activation remains under administrator control.', 'modern-catholic-plugin-update-manager' ) ),
 			'invalid_repository'  => array( 'error', __( 'The repository definition is invalid.', 'modern-catholic-plugin-update-manager' ) ),
 			'already_installed'   => array( 'warning', __( 'That component is already installed or is a protected Git checkout.', 'modern-catholic-plugin-update-manager' ) ),
-			'install_failed'      => array( 'error', __( 'Installation failed. Review filesystem permissions and release asset packaging.', 'modern-catholic-plugin-update-manager' ) ),
 		);
 		if ( isset( $messages[ $message ] ) ) {
 			printf( '<div class="notice notice-%1$s inline"><p>%2$s</p></div>', esc_attr( $messages[ $message ][0] ), esc_html( $messages[ $message ][1] ) );

@@ -245,17 +245,27 @@ final class Update_Manager {
 		if ( ! function_exists( 'get_plugins' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/plugin.php';
 		}
-		$plugins     = get_plugins();
-		$plugin_file = '';
-		$data        = array();
+		$plugins        = get_plugins();
+		$plugin_file    = '';
+		$fallback_file  = '';
+		$data           = array();
+		$fallback_data  = array();
 		foreach ( $plugins as $candidate => $candidate_data ) {
 			if ( 0 === strpos( $candidate, $repository['slug'] . '/' ) ) {
+				if ( ! $fallback_file ) {
+					$fallback_file = $candidate;
+					$fallback_data = $candidate_data;
+				}
 				if ( ! $repository['entrypoint'] || basename( $candidate ) === $repository['entrypoint'] ) {
 					$plugin_file = $candidate;
 					$data        = $candidate_data;
 					break;
 				}
 			}
+		}
+		if ( ! $plugin_file && $fallback_file ) {
+			$plugin_file = $fallback_file;
+			$data        = $fallback_data;
 		}
 
 		$path = WP_PLUGIN_DIR . '/' . $repository['slug'];

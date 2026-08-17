@@ -84,6 +84,18 @@ $github      = new GitHub_Client( $credentials );
 $manager     = new Update_Manager( $registry, $github );
 $admin       = new Admin_Page( $registry, $github, $manager, $credentials );
 
+$renamed_plugin_state = $manager->component_state(
+	array(
+		'type'       => 'plugin',
+		'slug'       => 'modern-catholic-plugin-parish-events',
+		'entrypoint' => 'parishpress-events.php',
+	)
+);
+if ( ! $renamed_plugin_state['installed'] || 'modern-catholic-plugin-parish-events/modern-catholic-parish-events.php' !== $renamed_plugin_state['component_file'] ) {
+	mc_updates_smoke_fail( 'An installed plugin was hidden when its registered entrypoint was stale.' );
+}
+mc_updates_smoke_pass( 'Installed plugins remain detectable after a main-file rename.' );
+
 $runtime_token = getenv( 'MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN' );
 if ( false !== $runtime_token && '' !== trim( (string) $runtime_token ) ) {
 	$validated_token = $github->validate_token( $runtime_token );
@@ -272,5 +284,72 @@ if ( false !== strpos( $add_page, 'mc-updates-table' ) ) {
 	mc_updates_smoke_fail( 'Add module view rendered the managed module table at the same time.' );
 }
 mc_updates_smoke_pass( 'Available modules render only after Add module is selected.' );
+
+$installer_repository = array(
+	'id'             => 'twitchd8/modern-catholic-plugin-installer-smoke',
+	'owner'          => 'twitchd8',
+	'repo'           => 'modern-catholic-plugin-installer-smoke',
+	'name'           => 'Modern Catholic – Installer Smoke Test',
+	'repository_url' => 'https://github.com/twitchd8/modern-catholic-plugin-installer-smoke',
+	'type'           => 'plugin',
+	'slug'           => 'modern-catholic-plugin-installer-smoke',
+	'entrypoint'     => 'installer-smoke.php',
+	'asset_template' => '{slug}-{version}.zip',
+	'enabled'        => true,
+	'source'         => 'test',
+);
+$inject_installer_repository = static function ( $repositories ) use ( $installer_repository ) {
+	$repositories[ $installer_repository['id'] ] = $installer_repository;
+	return $repositories;
+};
+$stub_installer_release = static function ( $preempt, $args, $url ) use ( $installer_repository ) {
+	$expected_url = 'https://api.github.com/repos/twitchd8/modern-catholic-plugin-installer-smoke/releases/latest';
+	if ( $expected_url !== $url ) {
+		return $preempt;
+	}
+	return array(
+		'headers'  => array(),
+		'body'     => wp_json_encode(
+			array(
+				'tag_name'   => 'v9.9.9',
+				'name'       => 'Installer smoke test',
+				'draft'      => false,
+				'prerelease' => false,
+				'assets'     => array(
+					array(
+						'name' => $installer_repository['slug'] . '-9.9.9.zip',
+						'url'  => 'https://api.github.com/repos/twitchd8/modern-catholic-plugin-installer-smoke/releases/assets/999',
+					),
+				),
+			)
+		),
+		'response' => array( 'code' => 200, 'message' => 'OK' ),
+		'cookies'  => array(),
+		'filename' => null,
+	);
+};
+$force_ftp_filesystem = static function () {
+	return 'ftpext';
+};
+add_filter( 'modern_catholic_updates_repositories', $inject_installer_repository );
+add_filter( 'pre_http_request', $stub_installer_release, 10, 3 );
+add_filter( 'filesystem_method', $force_ftp_filesystem, 999 );
+$_GET['mc_updates_view'] = 'install';
+$_GET['repository']      = $installer_repository['id'];
+$_GET['_wpnonce']        = wp_create_nonce( 'modern_catholic_updates_install_package_' . $installer_repository['id'] );
+$_REQUEST['repository']  = $_GET['repository'];
+$_REQUEST['_wpnonce']    = $_GET['_wpnonce'];
+ob_start();
+$admin->render();
+$installer_page = ob_get_clean();
+unset( $_GET['mc_updates_view'], $_GET['repository'], $_GET['_wpnonce'] );
+unset( $_REQUEST['repository'], $_REQUEST['_wpnonce'] );
+remove_filter( 'filesystem_method', $force_ftp_filesystem, 999 );
+remove_filter( 'pre_http_request', $stub_installer_release, 10 );
+remove_filter( 'modern_catholic_updates_repositories', $inject_installer_repository );
+if ( false === strpos( $installer_page, 'request-filesystem-credentials-form' ) || false === strpos( $installer_page, 'name="hostname"' ) ) {
+	mc_updates_smoke_fail( 'The installer did not expose WordPress filesystem credentials on a restricted host.' );
+}
+mc_updates_smoke_pass( 'Restricted-host installs use WordPress filesystem credential handling.' );
 
 echo 'Smoke test completed successfully.' . PHP_EOL;
