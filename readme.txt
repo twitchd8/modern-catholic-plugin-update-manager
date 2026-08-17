@@ -44,6 +44,10 @@ Read-only deployments may instead define `MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN` 
 
 == Changelog ==
 
+= Unreleased =
+* Detect installed plugins by their canonical directory when a saved main-file name is stale, while still preferring the configured entrypoint.
+* Run package installs through WordPress's interactive plugin and theme installer screens so restricted hosts can request filesystem credentials and display the underlying installation error.
+
 = 1.0.1 =
 * Simplify the administration screen to one managed module list and an on-demand Add module view.
 * Allow built-in, discovered, and custom repositories to be removed and added back.
