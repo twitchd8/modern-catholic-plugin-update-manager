@@ -4,7 +4,7 @@ Tags: updates, github, plugins, themes
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -43,6 +43,9 @@ Read-only deployments may instead define `MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN` 
 5. Use Check now to refresh release metadata.
 
 == Changelog ==
+
+= 1.0.1 =
+* Standardize the GitHub README with Modern Catholic branding, compatibility badges, security guidance, and GPL-3.0-only licensing.
 
 = 1.0.0 =
 * Add a GitHub-backed catalog of conventionally named Modern Catholic plugins and themes with add and install actions.
