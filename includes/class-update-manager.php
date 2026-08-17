@@ -267,19 +267,32 @@ final class Update_Manager {
 
 	/** Resolve a registered plugin to one WordPress plugin header. */
 	private function resolve_plugin_candidate( $repository, $plugins ) {
-		$candidates = array();
+		$candidates         = array();
+		$entrypoint_matches = array();
 		foreach ( $plugins as $candidate => $candidate_data ) {
 			if ( 0 !== strpos( $candidate, $repository['slug'] . '/' ) ) {
 				continue;
 			}
 			$candidates[ $candidate ] = $candidate_data;
 			if ( $repository['entrypoint'] && basename( $candidate ) === $repository['entrypoint'] ) {
-				return array( 'file' => $candidate, 'data' => $candidate_data, 'installed' => true, 'error' => '' );
+				$entrypoint_matches[ $candidate ] = $candidate_data;
 			}
 		}
 
 		if ( ! $candidates ) {
 			return array( 'file' => '', 'data' => array(), 'installed' => false, 'error' => '' );
+		}
+		if ( 1 === count( $entrypoint_matches ) ) {
+			$file = key( $entrypoint_matches );
+			return array( 'file' => $file, 'data' => $entrypoint_matches[ $file ], 'installed' => true, 'error' => '' );
+		}
+		if ( count( $entrypoint_matches ) > 1 ) {
+			$root_entrypoints = $this->root_plugin_candidates( $repository['slug'], $entrypoint_matches );
+			if ( 1 === count( $root_entrypoints ) ) {
+				$file = key( $root_entrypoints );
+				return array( 'file' => $file, 'data' => $root_entrypoints[ $file ], 'installed' => true, 'error' => '' );
+			}
+			return $this->ambiguous_plugin_candidate();
 		}
 
 		$repository_id      = isset( $repository['id'] ) ? $repository['id'] : '';
@@ -303,14 +316,7 @@ final class Update_Manager {
 			return array( 'file' => $file, 'data' => $repository_matches[ $file ], 'installed' => true, 'error' => '' );
 		}
 
-		$root_files = array_filter(
-			$candidates,
-			function ( $candidate ) use ( $repository ) {
-				$relative = substr( $candidate, strlen( $repository['slug'] ) + 1 );
-				return false === strpos( $relative, '/' );
-			},
-			ARRAY_FILTER_USE_KEY
-		);
+		$root_files = $this->root_plugin_candidates( $repository['slug'], $candidates );
 		if ( 1 === count( $root_files ) ) {
 			$file = key( $root_files );
 			return array( 'file' => $file, 'data' => $root_files[ $file ], 'installed' => true, 'error' => '' );
@@ -320,6 +326,23 @@ final class Update_Manager {
 			return array( 'file' => $file, 'data' => $candidates[ $file ], 'installed' => true, 'error' => '' );
 		}
 
+		return $this->ambiguous_plugin_candidate();
+	}
+
+	/** Filter a candidate map to plugin files at the registered directory root. */
+	private function root_plugin_candidates( $slug, $candidates ) {
+		return array_filter(
+			$candidates,
+			function ( $candidate ) use ( $slug ) {
+				$relative = substr( $candidate, strlen( $slug ) + 1 );
+				return false === strpos( $relative, '/' );
+			},
+			ARRAY_FILTER_USE_KEY
+		);
+	}
+
+	/** Return an installed-but-ambiguous plugin state that suppresses native updates. */
+	private function ambiguous_plugin_candidate() {
 		return array(
 			'file'      => '',
 			'data'      => array(),

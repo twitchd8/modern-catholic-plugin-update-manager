@@ -125,6 +125,19 @@ $root_match = $candidate_resolver->invoke(
 if ( 'modern-catholic-plugin-candidate-test/main.php' !== $root_match['file'] ) {
 	mc_updates_smoke_fail( 'Stale-entrypoint fallback did not prefer the sole root-level plugin file.' );
 }
+$candidate_repo['entrypoint'] = 'main.php';
+$duplicate_entrypoint_match   = $candidate_resolver->invoke(
+	$manager,
+	$candidate_repo,
+	array(
+		'modern-catholic-plugin-candidate-test/includes/main.php' => array( 'Name' => 'Nested plugin', 'Version' => '1.0.0' ),
+		'modern-catholic-plugin-candidate-test/main.php'          => array( 'Name' => 'Root plugin', 'Version' => '2.0.0' ),
+	)
+);
+if ( 'modern-catholic-plugin-candidate-test/main.php' !== $duplicate_entrypoint_match['file'] ) {
+	mc_updates_smoke_fail( 'Duplicate entrypoint basenames did not prefer the sole root-level plugin file.' );
+}
+$candidate_repo['entrypoint'] = 'missing.php';
 $ambiguous_match = $candidate_resolver->invoke(
 	$manager,
 	$candidate_repo,
