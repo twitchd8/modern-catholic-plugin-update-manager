@@ -56,11 +56,17 @@ final class Update_Manager {
 					'installed_version' => $state['version'],
 					'development'       => $state['development'],
 					'component_file'    => $state['component_file'],
+					'error'             => $state['error'],
 					'status'            => $repository['enabled'] ? 'checking' : 'disabled',
 				)
 			);
 
 			if ( ! $repository['enabled'] ) {
+				$results['items'][ $repository['id'] ] = $item;
+				continue;
+			}
+			if ( $state['error'] ) {
+				$item['status'] = 'component_detection_ambiguous';
 				$results['items'][ $repository['id'] ] = $item;
 				continue;
 			}
@@ -113,7 +119,7 @@ final class Update_Manager {
 				continue;
 			}
 			$state = $this->component_state( $repository );
-			if ( ! $state['installed'] || $state['development'] ) {
+			if ( ! $state['installed'] || $state['development'] || $state['error'] || ! $state['component_file'] ) {
 				continue;
 			}
 
@@ -227,7 +233,7 @@ final class Update_Manager {
 	 * Determine installed version, component file, and Git checkout protection.
 	 *
 	 * @param array<string,mixed> $repository Repository definition.
-	 * @return array{installed:bool,version:string,development:bool,component_file:string}
+	 * @return array{installed:bool,version:string,development:bool,component_file:string,error:string}
 	 */
 	public function component_state( $repository ) {
 		if ( 'theme' === $repository['type'] ) {
@@ -239,31 +245,109 @@ final class Update_Manager {
 				'version'        => $installed ? (string) $theme->get( 'Version' ) : '',
 				'development'    => is_dir( $path . '/.git' ),
 				'component_file' => $repository['slug'],
+				'error'          => '',
 			);
 		}
 
 		if ( ! function_exists( 'get_plugins' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/plugin.php';
 		}
-		$plugins     = get_plugins();
-		$plugin_file = '';
-		$data        = array();
-		foreach ( $plugins as $candidate => $candidate_data ) {
-			if ( 0 === strpos( $candidate, $repository['slug'] . '/' ) ) {
-				if ( ! $repository['entrypoint'] || basename( $candidate ) === $repository['entrypoint'] ) {
-					$plugin_file = $candidate;
-					$data        = $candidate_data;
-					break;
-				}
-			}
-		}
+		$plugins  = get_plugins();
+		$resolved = $this->resolve_plugin_candidate( $repository, $plugins );
 
 		$path = WP_PLUGIN_DIR . '/' . $repository['slug'];
 		return array(
-			'installed'      => '' !== $plugin_file,
-			'version'        => isset( $data['Version'] ) ? (string) $data['Version'] : '',
+			'installed'      => $resolved['installed'],
+			'version'        => isset( $resolved['data']['Version'] ) ? (string) $resolved['data']['Version'] : '',
 			'development'    => is_dir( $path . '/.git' ),
-			'component_file' => $plugin_file,
+			'component_file' => $resolved['file'],
+			'error'          => $resolved['error'],
+		);
+	}
+
+	/** Resolve a registered plugin to one WordPress plugin header. */
+	private function resolve_plugin_candidate( $repository, $plugins ) {
+		$candidates         = array();
+		$entrypoint_matches = array();
+		foreach ( $plugins as $candidate => $candidate_data ) {
+			if ( 0 !== strpos( $candidate, $repository['slug'] . '/' ) ) {
+				continue;
+			}
+			$candidates[ $candidate ] = $candidate_data;
+			if ( $repository['entrypoint'] && basename( $candidate ) === $repository['entrypoint'] ) {
+				$entrypoint_matches[ $candidate ] = $candidate_data;
+			}
+		}
+
+		if ( ! $candidates ) {
+			return array( 'file' => '', 'data' => array(), 'installed' => false, 'error' => '' );
+		}
+		if ( 1 === count( $entrypoint_matches ) ) {
+			$file = key( $entrypoint_matches );
+			return array( 'file' => $file, 'data' => $entrypoint_matches[ $file ], 'installed' => true, 'error' => '' );
+		}
+		if ( count( $entrypoint_matches ) > 1 ) {
+			$root_entrypoints = $this->root_plugin_candidates( $repository['slug'], $entrypoint_matches );
+			if ( 1 === count( $root_entrypoints ) ) {
+				$file = key( $root_entrypoints );
+				return array( 'file' => $file, 'data' => $root_entrypoints[ $file ], 'installed' => true, 'error' => '' );
+			}
+			return $this->ambiguous_plugin_candidate();
+		}
+
+		$repository_id      = isset( $repository['id'] ) ? $repository['id'] : '';
+		$repository_matches = array_filter(
+			$candidates,
+			function ( $candidate_data ) use ( $repository_id ) {
+				if ( ! $repository_id ) {
+					return false;
+				}
+				foreach ( array( 'UpdateURI', 'PluginURI' ) as $header ) {
+					$parsed = ! empty( $candidate_data[ $header ] ) ? Repository_Registry::parse_repository( $candidate_data[ $header ] ) : null;
+					if ( $parsed && $parsed['id'] === $repository_id ) {
+						return true;
+					}
+				}
+				return false;
+			}
+		);
+		if ( 1 === count( $repository_matches ) ) {
+			$file = key( $repository_matches );
+			return array( 'file' => $file, 'data' => $repository_matches[ $file ], 'installed' => true, 'error' => '' );
+		}
+
+		$root_files = $this->root_plugin_candidates( $repository['slug'], $candidates );
+		if ( 1 === count( $root_files ) ) {
+			$file = key( $root_files );
+			return array( 'file' => $file, 'data' => $root_files[ $file ], 'installed' => true, 'error' => '' );
+		}
+		if ( 1 === count( $candidates ) ) {
+			$file = key( $candidates );
+			return array( 'file' => $file, 'data' => $candidates[ $file ], 'installed' => true, 'error' => '' );
+		}
+
+		return $this->ambiguous_plugin_candidate();
+	}
+
+	/** Filter a candidate map to plugin files at the registered directory root. */
+	private function root_plugin_candidates( $slug, $candidates ) {
+		return array_filter(
+			$candidates,
+			function ( $candidate ) use ( $slug ) {
+				$relative = substr( $candidate, strlen( $slug ) + 1 );
+				return false === strpos( $relative, '/' );
+			},
+			ARRAY_FILTER_USE_KEY
+		);
+	}
+
+	/** Return an installed-but-ambiguous plugin state that suppresses native updates. */
+	private function ambiguous_plugin_candidate() {
+		return array(
+			'file'      => '',
+			'data'      => array(),
+			'installed' => true,
+			'error'     => __( 'Multiple plugin entrypoints were found. Configure the exact plugin entrypoint before enabling native updates.', 'modern-catholic-plugin-update-manager' ),
 		);
 	}
 }
