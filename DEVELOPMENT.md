@@ -10,6 +10,10 @@ This directory is an independent Modern Catholic component repository.
 - Keep GitHub tokens outside the repository and WordPress database.
 - `.github-token.php` is runtime-only: keep it ignored, exclude it from release archives, and never inspect or print its saved value.
 
-The update manager intentionally suppresses native updates for component directories containing `.git`. Test native package replacement in a separate ZIP-installed staging site.
+The update manager intentionally suppresses native updates for component directories containing `.git`. Native package replacement belongs only in a separate ZIP-installed staging site and requires explicit smoke-test approval.
 
 Repository catalog discovery is limited to trusted owners and names matching `modern-catholic-plugin-*`, `modern-catholic-theme`, or `modern-catholic-theme-*`. Catalog installation still requires the exact `{slug}-{version}.zip` stable release asset.
+
+## Validation approval
+
+Run targeted syntax/static checks by default. Native update discovery, package download/replacement, WordPress admin behavior, REST/HTTP behavior, and installation in a ZIP-based staging site are smoke tests. Describe the proposed scope and obtain explicit user approval before running them.
