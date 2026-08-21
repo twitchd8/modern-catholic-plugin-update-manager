@@ -1,3 +1,9 @@
 /github-token.php
 /.github-token.php
 /tests/.github-token-smoke.php
+
+# Local Codex workspace files
+AGENTS.md
+.codex/
+.agents/
+docs/superpowers/
