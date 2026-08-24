@@ -263,6 +263,12 @@ final class Admin_Page {
 
 	/** Redirect an authorized request into WordPress's interactive installer screen. */
 	private function redirect_to_installer( $repository_id ) {
+		wp_safe_redirect( $this->installer_redirect_url( $repository_id ) );
+		exit;
+	}
+
+	/** Build the repository-specific interactive installer URL. */
+	private function installer_redirect_url( $repository_id ) {
 		$action = $this->installer_nonce_action( $repository_id );
 		$url    = add_query_arg(
 			array(
@@ -272,8 +278,7 @@ final class Admin_Page {
 			),
 			admin_url( 'plugins.php' )
 		);
-		wp_safe_redirect( wp_nonce_url( $url, $action ) );
-		exit;
+		return add_query_arg( '_wpnonce', wp_create_nonce( $action ), $url );
 	}
 
 	/** Run one trusted release through WordPress's normal interactive installer UI. */

@@ -52,6 +52,11 @@ Local component directories containing `.git` are intentionally protected. Valid
 
 ## Changelog
 
+### 1.0.3
+
+- Fix Install redirects so WordPress receives the selected repository, installer view, and security nonce instead of returning silently to the module list.
+- Document runtime-validation approval requirements and ignore local Codex workspace files.
+
 ### 1.0.2
 
 - Detect installed plugins by their canonical directory when a saved main-file name is stale, while still preferring the configured entrypoint.
