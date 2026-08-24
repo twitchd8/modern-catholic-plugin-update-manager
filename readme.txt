@@ -4,7 +4,7 @@ Tags: updates, github, plugins, themes
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -43,6 +43,10 @@ Read-only deployments may instead define `MODERN_CATHOLIC_UPDATES_GITHUB_TOKEN` 
 5. Use Check now to refresh release metadata.
 
 == Changelog ==
+
+= 1.0.3 =
+* Fix Install redirects so WordPress receives the selected repository, installer view, and security nonce instead of returning silently to the module list.
+* Document runtime-validation approval requirements and ignore local Codex workspace files.
 
 = 1.0.2 =
 * Detect installed plugins by their canonical directory when a saved main-file name is stale, while still preferring the configured entrypoint.

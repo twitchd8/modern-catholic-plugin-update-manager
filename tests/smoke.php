@@ -97,6 +97,9 @@ if ( ! $renamed_plugin_state['installed'] || 'modern-catholic-plugin-parish-even
 mc_updates_smoke_pass( 'Installed plugins remain detectable after a main-file rename.' );
 
 $candidate_resolver = new ReflectionMethod( Update_Manager::class, 'resolve_plugin_candidate' );
+if ( PHP_VERSION_ID < 80100 ) {
+	$candidate_resolver->setAccessible( true );
+}
 $candidate_repo     = array(
 	'id'             => 'twitchd8/modern-catholic-plugin-candidate-test',
 	'repository_url' => 'https://github.com/twitchd8/modern-catholic-plugin-candidate-test',
@@ -339,6 +342,18 @@ if ( false !== strpos( $add_page, 'mc-updates-table' ) ) {
 	mc_updates_smoke_fail( 'Add module view rendered the managed module table at the same time.' );
 }
 mc_updates_smoke_pass( 'Available modules render only after Add module is selected.' );
+
+$installer_url_method = new ReflectionMethod( Admin_Page::class, 'installer_redirect_url' );
+if ( PHP_VERSION_ID < 80100 ) {
+	$installer_url_method->setAccessible( true );
+}
+$installer_url        = $installer_url_method->invoke( $admin, 'twitchd8/modern-catholic-theme' );
+$installer_url_parts  = wp_parse_url( $installer_url );
+parse_str( isset( $installer_url_parts['query'] ) ? $installer_url_parts['query'] : '', $installer_url_query );
+if ( ! empty( $installer_url_parts['fragment'] ) || 'modern-catholic-updates' !== ( $installer_url_query['page'] ?? '' ) || 'install' !== ( $installer_url_query['mc_updates_view'] ?? '' ) || 'twitchd8/modern-catholic-theme' !== ( $installer_url_query['repository'] ?? '' ) || ! wp_verify_nonce( $installer_url_query['_wpnonce'] ?? '', 'modern_catholic_updates_install_package_twitchd8/modern-catholic-theme' ) ) {
+	mc_updates_smoke_fail( 'The Install action redirect lost its repository-specific query parameters.' );
+}
+mc_updates_smoke_pass( 'Install action redirects preserve the installer view, repository, and nonce.' );
 
 $installer_repository = array(
 	'id'             => 'twitchd8/modern-catholic-plugin-installer-smoke',
